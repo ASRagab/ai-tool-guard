@@ -8,6 +8,7 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import { AIToolDetector, DetectionResult, ComponentInfo } from './detectors/base-detector';
 import { findClosestMatches } from './utils/string-utils';
+import { ScanResult } from './scanners/base-scanner';
 
 /**
  * Detector failure information
@@ -24,6 +25,24 @@ export interface DetectorFailure {
 export interface DetectionSummary {
   results: Map<string, DetectionResult>;
   failures: DetectorFailure[];
+}
+
+/**
+ * Scan results for a single ecosystem
+ */
+export interface EcosystemReport {
+  ecosystem: string;
+  componentScans: Map<string, ScanResult[]>;
+  totalIssues: number;
+}
+
+/**
+ * Complete scan report for all ecosystems
+ */
+export interface ScanReport {
+  ecosystemReports: Map<string, EcosystemReport>;
+  totalIssues: number;
+  timestamp: Date;
 }
 
 /**
@@ -521,5 +540,110 @@ export class AutoDetector {
       results,
       failures: this.detectorFailures
     };
+  }
+
+  /**
+   * Scans all detected components using appropriate scanners based on component type.
+   * For each ecosystem and its components, selects the appropriate scanner and performs security scanning.
+   *
+   * @param {Map<string, DetectionResult>} detectionResults - Results from detectAll() containing detected ecosystems and components
+   * @returns {Promise<ScanReport>} Complete scan report with results for all ecosystems
+   *
+   * @example
+   * ```typescript
+   * const autoDetector = new AutoDetector();
+   * await autoDetector.loadDetectors();
+   * const detectionResults = await autoDetector.detectAll();
+   * const scanReport = await autoDetector.scanDetected(detectionResults);
+   *
+   * scanReport.ecosystemReports.forEach((report, ecosystem) => {
+   *   console.log(`${ecosystem}: ${report.totalIssues} issues found`);
+   * });
+   * ```
+   */
+  async scanDetected(detectionResults: Map<string, DetectionResult>): Promise<ScanReport> {
+    const { selectScanner } = await import('./scanners/scanner-factory');
+    const ecosystemReports = new Map<string, EcosystemReport>();
+    let totalIssues = 0;
+
+    // Iterate through each detected ecosystem
+    for (const [ecosystemName, detectionResult] of detectionResults) {
+      const componentScans = new Map<string, ScanResult[]>();
+      let ecosystemTotalIssues = 0;
+
+      // Iterate through each component in the ecosystem
+      for (const [componentKey, componentInfo] of Object.entries(detectionResult.components)) {
+        try {
+          // Determine component type from the component info
+          const componentType = this.mapComponentTypeToScannerType(componentInfo.type);
+
+          // Select appropriate scanner based on component type and path
+          const scanner = selectScanner(componentType, componentInfo.path);
+
+          // Scan the component's path
+          const scanResults = await scanner.scanDirectory(componentInfo.path);
+
+          // Store scan results for this component
+          if (scanResults.length > 0) {
+            componentScans.set(componentKey, scanResults);
+
+            // Calculate issue count for this component
+            const componentIssues = scanResults.reduce((sum, result) => sum + result.matches.length, 0);
+            ecosystemTotalIssues += componentIssues;
+          }
+        } catch (error) {
+          // Log error but continue scanning other components
+          console.warn(`⚠️  Failed to scan component ${componentKey}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      // Create ecosystem report
+      const ecosystemReport: EcosystemReport = {
+        ecosystem: ecosystemName,
+        componentScans,
+        totalIssues: ecosystemTotalIssues
+      };
+
+      ecosystemReports.set(ecosystemName, ecosystemReport);
+      totalIssues += ecosystemTotalIssues;
+    }
+
+    // Create and return the complete scan report
+    return {
+      ecosystemReports,
+      totalIssues,
+      timestamp: new Date()
+    };
+  }
+
+  /**
+   * Maps component type string to scanner-factory ComponentType.
+   *
+   * @private
+   * @param {string} [type] - Component type string from detection (e.g., 'mcp-server', 'hook', 'skill')
+   * @returns {'mcpServer' | 'hook' | 'skill' | 'config' | 'unknown'} Normalized component type for scanner selection
+   */
+  private mapComponentTypeToScannerType(type?: string): 'mcpServer' | 'hook' | 'skill' | 'config' | 'unknown' {
+    if (!type) {
+      return 'unknown';
+    }
+
+    const normalizedType = type.toLowerCase().trim();
+
+    // Map various type strings to scanner types
+    if (normalizedType.includes('mcp')) {
+      return 'mcpServer';
+    }
+    if (normalizedType.includes('hook')) {
+      return 'hook';
+    }
+    if (normalizedType.includes('skill') || normalizedType.includes('agent')) {
+      return 'skill';
+    }
+    if (normalizedType.includes('config')) {
+      return 'config';
+    }
+
+    return 'unknown';
   }
 }

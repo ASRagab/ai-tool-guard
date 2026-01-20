@@ -3,28 +3,47 @@ import * as os from 'os';
 import * as fs from 'fs';
 
 /**
- * Unix-like path handling utilities for macOS and Linux.
+ * Cross-platform path handling utilities for Windows, macOS, and Linux.
  * Provides robust path operations with tilde expansion and symlink resolution.
  */
 
 /**
- * Expands tilde (~) to the user's home directory on Unix-like systems.
+ * Checks if the current platform is Windows.
  *
- * @param filePath - Path potentially containing tilde
+ * @returns True if running on Windows, false otherwise
+ */
+export function isWindows(): boolean {
+  return process.platform === 'win32';
+}
+
+/**
+ * Expands tilde (~) or %USERPROFILE% to the user's home directory.
+ * Works on Windows, macOS, and Linux.
+ *
+ * @param filePath - Path potentially containing tilde or %USERPROFILE%
  * @returns Expanded absolute path
  *
  * @example
  * expandTilde('~/documents') // Returns '/Users/username/documents' on macOS
  * expandTilde('~/.config')   // Returns '/Users/username/.config' on macOS
+ * expandTilde('%USERPROFILE%\\.config') // Returns 'C:\\Users\\username\\.config' on Windows
  * expandTilde('/absolute')   // Returns '/absolute' (no change)
  */
 export function expandTilde(filePath: string): string {
+  const homeDir = os.homedir();
+
+  // Handle Windows %USERPROFILE% environment variable
+  if (isWindows() && filePath.includes('%USERPROFILE%')) {
+    return filePath.replace(/%USERPROFILE%/g, homeDir);
+  }
+
+  // Handle Unix-like tilde expansion
   if (filePath.startsWith('~/') || filePath === '~') {
-    const homeDir = os.homedir();
     return filePath === '~'
       ? homeDir
       : path.join(homeDir, filePath.slice(2));
   }
+
   return filePath;
 }
 
@@ -66,18 +85,22 @@ export function resolvePathSync(filePath: string): string {
 }
 
 /**
- * Parses the PATH environment variable using Unix-style colon separator.
+ * Parses the PATH environment variable using platform-specific delimiter.
+ * Uses semicolon (;) on Windows, colon (:) on Unix-like systems.
  * Handles tilde expansion and filters out empty entries.
  *
  * @returns Array of absolute directory paths from PATH
  *
  * @example
- * parsePATH() // Returns ['/usr/local/bin', '/usr/bin', '/bin', '/Users/user/.local/bin']
+ * parsePATH() // Returns ['/usr/local/bin', '/usr/bin', '/bin', '/Users/user/.local/bin'] on Unix
+ * parsePATH() // Returns ['C:\\Windows\\System32', 'C:\\Program Files\\nodejs'] on Windows
  */
 export function parsePATH(): string[] {
   const pathEnv = process.env.PATH || '';
+  const delimiter = isWindows() ? ';' : ':';
+
   return pathEnv
-    .split(':')
+    .split(delimiter)
     .filter(p => p.length > 0)
     .map(p => expandTilde(p.trim()))
     .map(p => path.resolve(p));
@@ -120,13 +143,71 @@ export async function isSymlink(filePath: string): Promise<boolean> {
 }
 
 /**
- * Gets the home directory for the current user on Unix-like systems.
+ * Gets the home directory for the current user.
+ * Works on Windows (%USERPROFILE%), macOS, and Linux.
  *
  * @returns The absolute path to the user's home directory
  *
  * @example
  * getHomeDir() // Returns '/Users/username' on macOS or '/home/username' on Linux
+ * getHomeDir() // Returns 'C:\\Users\\username' on Windows
  */
 export function getHomeDir(): string {
   return os.homedir();
+}
+
+/**
+ * Normalizes path separators for the current platform.
+ * Converts all forward slashes to backslashes on Windows,
+ * and all backslashes to forward slashes on Unix-like systems.
+ *
+ * @param filePath - Path with potentially mixed separators
+ * @returns Path with normalized separators for the current platform
+ *
+ * @example
+ * normalizePath('~/.config/app') // Returns '~/.config/app' on Unix
+ * normalizePath('~/.config/app') // Returns '~\\.config\\app' on Windows
+ * normalizePath('C:\\Users\\name') // Returns 'C:\\Users\\name' on Windows
+ * normalizePath('C:\\Users\\name') // Returns 'C:/Users/name' on Unix
+ */
+export function normalizePath(filePath: string): string {
+  if (isWindows()) {
+    // On Windows, convert all forward slashes to backslashes
+    return filePath.replace(/\//g, '\\');
+  } else {
+    // On Unix-like systems, convert all backslashes to forward slashes
+    return filePath.replace(/\\/g, '/');
+  }
+}
+
+/**
+ * Gets the Windows APPDATA directory or returns null on non-Windows platforms.
+ *
+ * @returns The absolute path to APPDATA on Windows, or null on other platforms
+ *
+ * @example
+ * getAppDataDir() // Returns 'C:\\Users\\username\\AppData\\Roaming' on Windows
+ * getAppDataDir() // Returns null on macOS/Linux
+ */
+export function getAppDataDir(): string | null {
+  if (isWindows()) {
+    return process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+  }
+  return null;
+}
+
+/**
+ * Gets the Windows LocalAppData directory or returns null on non-Windows platforms.
+ *
+ * @returns The absolute path to LocalAppData on Windows, or null on other platforms
+ *
+ * @example
+ * getLocalAppDataDir() // Returns 'C:\\Users\\username\\AppData\\Local' on Windows
+ * getLocalAppDataDir() // Returns null on macOS/Linux
+ */
+export function getLocalAppDataDir(): string | null {
+  if (isWindows()) {
+    return process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+  }
+  return null;
 }

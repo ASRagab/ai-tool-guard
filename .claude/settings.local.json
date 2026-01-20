@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__mcpproxy__retrieve_tools",
+      "mcp__mcpproxy__upstream_servers",
+      "Bash( if [ -d ~/.claude/plugins/cache/worktrunk ])",
+      "Bash(then echo \"📦 worktrunk\" ls ~/.claude/plugins/cache/worktrunk/worktrunk/1.0.0/skills)",
+      "Bash(claude mcp:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Skill(ralph-tui-create-json)"
+    ]
+  }
+}

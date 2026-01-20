@@ -1,0 +1,275 @@
+{
+  "version": 1,
+  "sessionId": "c3838886-c754-4743-9fa8-9d057243311a",
+  "status": "running",
+  "startedAt": "2026-01-20T22:24:42.347Z",
+  "updatedAt": "2026-01-20T22:45:57.988Z",
+  "currentIteration": 11,
+  "maxIterations": 100,
+  "tasksCompleted": 11,
+  "isPaused": false,
+  "agentPlugin": "claude",
+  "trackerState": {
+    "plugin": "json",
+    "prdPath": "./tasks/prd.json",
+    "totalTasks": 23,
+    "tasks": [
+      {
+        "id": "US-001",
+        "title": "Define core detection interfaces",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-009",
+        "title": "Refactor existing scanner as BaseScanner",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-015",
+        "title": "Add CLI argument parsing",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-019",
+        "title": "Create grouped output formatter",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-022",
+        "title": "Implement Unix-like path handling",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-002",
+        "title": "Implement AutoDetector orchestrator",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-003",
+        "title": "Create detector registry with auto-loading",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-010",
+        "title": "Implement MCP Server scanner",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-011",
+        "title": "Implement Hook scanner",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-012",
+        "title": "Implement Skill/Agent scanner",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-013",
+        "title": "Implement Config scanner",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-023",
+        "title": "Windows support (follow-up)",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-004",
+        "title": "Implement Claude Code detector",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-005",
+        "title": "Implement OpenCode detector",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-006",
+        "title": "Implement GitHub Copilot detector",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-007",
+        "title": "Implement Codex CLI detector",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-008",
+        "title": "Implement Gemini integration detector",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-014",
+        "title": "Create scanner factory",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-018",
+        "title": "Implement ecosystem filtering",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-021",
+        "title": "Add error handling and safety",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-020",
+        "title": "Implement ecosystem scanning",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-016",
+        "title": "Implement automatic detection mode",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-017",
+        "title": "Implement interactive detection mode",
+        "status": "open",
+        "completedInSession": false
+      }
+    ]
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "US-001",
+      "taskTitle": "Define core detection interfaces",
+      "taskCompleted": true,
+      "durationMs": 93904,
+      "startedAt": "2026-01-20T22:24:45.974Z",
+      "endedAt": "2026-01-20T22:26:19.878Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "US-009",
+      "taskTitle": "Refactor existing scanner as BaseScanner",
+      "taskCompleted": true,
+      "durationMs": 113586,
+      "startedAt": "2026-01-20T22:26:20.888Z",
+      "endedAt": "2026-01-20T22:28:14.474Z"
+    },
+    {
+      "iteration": 3,
+      "status": "completed",
+      "taskId": "US-015",
+      "taskTitle": "Add CLI argument parsing",
+      "taskCompleted": true,
+      "durationMs": 107215,
+      "startedAt": "2026-01-20T22:28:15.482Z",
+      "endedAt": "2026-01-20T22:30:02.697Z"
+    },
+    {
+      "iteration": 4,
+      "status": "completed",
+      "taskId": "US-019",
+      "taskTitle": "Create grouped output formatter",
+      "taskCompleted": true,
+      "durationMs": 126718,
+      "startedAt": "2026-01-20T22:30:03.705Z",
+      "endedAt": "2026-01-20T22:32:10.423Z"
+    },
+    {
+      "iteration": 5,
+      "status": "completed",
+      "taskId": "US-022",
+      "taskTitle": "Implement Unix-like path handling",
+      "taskCompleted": true,
+      "durationMs": 266496,
+      "startedAt": "2026-01-20T22:32:11.430Z",
+      "endedAt": "2026-01-20T22:36:37.926Z"
+    },
+    {
+      "iteration": 6,
+      "status": "completed",
+      "taskId": "US-002",
+      "taskTitle": "Implement AutoDetector orchestrator",
+      "taskCompleted": true,
+      "durationMs": 98730,
+      "startedAt": "2026-01-20T22:36:38.934Z",
+      "endedAt": "2026-01-20T22:38:17.664Z"
+    },
+    {
+      "iteration": 7,
+      "status": "completed",
+      "taskId": "US-003",
+      "taskTitle": "Create detector registry with auto-loading",
+      "taskCompleted": true,
+      "durationMs": 91472,
+      "startedAt": "2026-01-20T22:38:18.685Z",
+      "endedAt": "2026-01-20T22:39:50.157Z"
+    },
+    {
+      "iteration": 8,
+      "status": "completed",
+      "taskId": "US-010",
+      "taskTitle": "Implement MCP Server scanner",
+      "taskCompleted": true,
+      "durationMs": 109602,
+      "startedAt": "2026-01-20T22:39:51.170Z",
+      "endedAt": "2026-01-20T22:41:40.772Z"
+    },
+    {
+      "iteration": 9,
+      "status": "completed",
+      "taskId": "US-011",
+      "taskTitle": "Implement Hook scanner",
+      "taskCompleted": true,
+      "durationMs": 83870,
+      "startedAt": "2026-01-20T22:41:41.778Z",
+      "endedAt": "2026-01-20T22:43:05.648Z"
+    },
+    {
+      "iteration": 10,
+      "status": "completed",
+      "taskId": "US-012",
+      "taskTitle": "Implement Skill/Agent scanner",
+      "taskCompleted": true,
+      "durationMs": 92450,
+      "startedAt": "2026-01-20T22:43:06.656Z",
+      "endedAt": "2026-01-20T22:44:39.106Z"
+    },
+    {
+      "iteration": 11,
+      "status": "completed",
+      "taskId": "US-013",
+      "taskTitle": "Implement Config scanner",
+      "taskCompleted": true,
+      "durationMs": 76850,
+      "startedAt": "2026-01-20T22:44:40.117Z",
+      "endedAt": "2026-01-20T22:45:56.967Z"
+    }
+  ],
+  "skippedTaskIds": [],
+  "cwd": "/Users/ahmad.ragab/Dev/tools/ai-tool-guard",
+  "activeTaskIds": [
+    "US-023"
+  ],
+  "subagentPanelVisible": false
+}

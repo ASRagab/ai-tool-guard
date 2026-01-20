@@ -26,6 +26,15 @@ const SUSPICIOUS_PATTERNS = [
   { id: 'HARDCODED_IP', pattern: /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/, description: 'Hardcoded IP address detected' }
 ];
 
+/**
+ * File-level scan error (e.g., can't read a specific file)
+ */
+export interface FileError {
+  filePath: string;
+  type: 'permission' | 'binary' | 'size' | 'read' | 'encoding';
+  message: string;
+}
+
 export interface ScanResult {
   filePath: string;
   matches: {
@@ -36,8 +45,24 @@ export interface ScanResult {
   }[];
 }
 
+/**
+ * Extended scan result with error tracking
+ */
+export interface ScanSummary {
+  results: ScanResult[];
+  errors: FileError[];
+  stats: {
+    filesScanned: number;
+    filesSkipped: number;
+    binaryFilesSkipped: number;
+    largeFilesSkipped: number;
+    permissionErrors: number;
+  };
+}
+
 export class BaseScanner {
   protected patterns = SUSPICIOUS_PATTERNS;
+  private readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   scanFile(filePath: string, content: string): ScanResult {
     const lines = content.split('\n');
@@ -60,7 +85,29 @@ export class BaseScanner {
   }
 
   async scanDirectory(dirPath: string): Promise<ScanResult[]> {
+    const summary = await this.scanDirectoryWithSummary(dirPath);
+    return summary.results;
+  }
+
+  /**
+   * Scan directory with comprehensive error tracking and summary.
+   * Implements all safety features: permission checks, size limits, binary detection, symlink loop prevention.
+   *
+   * @param dirPath - Directory path to scan
+   * @returns ScanSummary with results, errors, and statistics
+   */
+  async scanDirectoryWithSummary(dirPath: string): Promise<ScanSummary> {
     const results: ScanResult[] = [];
+    const errors: FileError[] = [];
+    const stats = {
+      filesScanned: 0,
+      filesSkipped: 0,
+      binaryFilesSkipped: 0,
+      largeFilesSkipped: 0,
+      permissionErrors: 0
+    };
+
+    // walkDirectory already handles directory permissions and symlink loops
     const filesToScan = await walkDirectory(dirPath, ['.py', '.js', '.ts', '.md', '.json', '.sh']);
 
     for (const file of filesToScan) {
@@ -68,31 +115,108 @@ export class BaseScanner {
         // Resolve symlinks to get the real file path
         const realPath = await resolvePath(file);
 
-        // 1. Binary Check (Fast Fail)
-        // We use the sync version here as we are already inside an async loop
-        // and want to quickly skip without overhead.
+        // 1. Binary Check (Fast Fail) - use existing binary file check before text scan
         if (isBinaryFileSync(realPath)) {
-            continue;
+          stats.binaryFilesSkipped++;
+          stats.filesSkipped++;
+          continue;
         }
 
-        // 2. Size Check (Prevent OOM)
-        const stats = await fs.promises.stat(realPath);
-        if (stats.size > 10 * 1024 * 1024) { // Skip files > 10MB
-            console.warn(`Skipping large file: ${path.basename(realPath)} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
-            continue;
+        // 2. Size Check (Prevent OOM) - skip files > 10MB with warning
+        const stats_file = await fs.promises.stat(realPath);
+        if (stats_file.size > this.MAX_FILE_SIZE) {
+          const fileSizeMB = (stats_file.size / 1024 / 1024).toFixed(2);
+          const displayPath = path.relative(process.cwd(), realPath);
+          console.warn(`⚠️  Skipping large file: ${displayPath} (${fileSizeMB} MB)`);
+
+          errors.push({
+            filePath: file,
+            type: 'size',
+            message: `File size ${fileSizeMB} MB exceeds limit of ${this.MAX_FILE_SIZE / 1024 / 1024} MB`
+          });
+
+          stats.largeFilesSkipped++;
+          stats.filesSkipped++;
+          continue;
         }
 
+        // 3. Read file content
         const content = await fs.promises.readFile(realPath, 'utf-8');
         const result = this.scanFile(file, content); // Use original path for reporting
+
+        stats.filesScanned++;
+
         if (result.matches.length > 0) {
           results.push(result);
         }
       } catch (err) {
-        // Ignore read errors (permissions, etc)
-        // console.debug(`Failed to read ${file}:`, err);
+        // Track different types of errors
+        if (err instanceof Error) {
+          if (err.message.includes('EACCES') || err.message.includes('EPERM')) {
+            errors.push({
+              filePath: file,
+              type: 'permission',
+              message: 'Permission denied'
+            });
+            stats.permissionErrors++;
+          } else if (err.message.includes('EISDIR')) {
+            // Skip directories quietly
+            continue;
+          } else {
+            errors.push({
+              filePath: file,
+              type: 'read',
+              message: err.message
+            });
+          }
+        } else {
+          errors.push({
+            filePath: file,
+            type: 'read',
+            message: String(err)
+          });
+        }
+        stats.filesSkipped++;
       }
     }
 
-    return results;
+    return { results, errors, stats };
+  }
+
+  /**
+   * Display error summary if any errors occurred during scanning.
+   *
+   * @param summary - Scan summary with errors and stats
+   */
+  displayErrorSummary(summary: ScanSummary): void {
+    if (summary.errors.length === 0 && summary.stats.filesSkipped === 0) {
+      return;
+    }
+
+    console.log('\n📊 Scan Summary:');
+    console.log(`   Files scanned: ${summary.stats.filesScanned}`);
+    console.log(`   Files skipped: ${summary.stats.filesSkipped}`);
+
+    if (summary.stats.binaryFilesSkipped > 0) {
+      console.log(`   - Binary files: ${summary.stats.binaryFilesSkipped}`);
+    }
+    if (summary.stats.largeFilesSkipped > 0) {
+      console.log(`   - Large files (>10MB): ${summary.stats.largeFilesSkipped}`);
+    }
+    if (summary.stats.permissionErrors > 0) {
+      console.log(`   - Permission errors: ${summary.stats.permissionErrors}`);
+    }
+
+    if (summary.errors.length > 0) {
+      console.log('\n⚠️  Errors encountered:');
+      const errorsByType = summary.errors.reduce((acc, err) => {
+        acc[err.type] = (acc[err.type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      Object.entries(errorsByType).forEach(([type, count]) => {
+        console.log(`   - ${type}: ${count} file(s)`);
+      });
+    }
   }
 }

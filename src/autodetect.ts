@@ -10,6 +10,23 @@ import { AIToolDetector, DetectionResult, ComponentInfo } from './detectors/base
 import { findClosestMatches } from './utils/string-utils';
 
 /**
+ * Detector failure information
+ */
+export interface DetectorFailure {
+  detectorName: string;
+  error: string;
+  type: 'timeout' | 'error' | 'load-error';
+}
+
+/**
+ * Extended detection results with failure tracking
+ */
+export interface DetectionSummary {
+  results: Map<string, DetectionResult>;
+  failures: DetectorFailure[];
+}
+
+/**
  * Orchestrator class that loads and runs all AI tool detectors in parallel.
  * Handles dynamic detector loading, parallel execution, error recovery, and timeouts.
  *
@@ -29,6 +46,7 @@ export class AutoDetector {
   private detectors: AIToolDetector[] = [];
   private readonly DETECTOR_TIMEOUT_MS = 30000; // 30 seconds
   private readonly detectorsDir: string;
+  private detectorFailures: DetectorFailure[] = [];
 
   /**
    * Creates a new AutoDetector instance.
@@ -89,7 +107,13 @@ export class AutoDetector {
           }
         } catch (error) {
           // Log but continue if a single detector fails to load
-          console.warn(`Warning: Failed to load detector from ${file}:`, error instanceof Error ? error.message : String(error));
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.warn(`⚠️  Failed to load detector from ${file}: ${errorMsg}`);
+          this.detectorFailures.push({
+            detectorName: file,
+            error: errorMsg,
+            type: 'load-error'
+          });
         }
       }
     } catch (error) {
@@ -234,6 +258,7 @@ export class AutoDetector {
 
   /**
    * Runs a single detector with timeout protection and error handling.
+   * Continues with other detectors if one fails, tracking failures for summary.
    *
    * @private
    * @param {AIToolDetector} detector - The detector to run
@@ -257,7 +282,17 @@ export class AutoDetector {
       return result;
     } catch (error) {
       // Log the error but continue with other detectors
-      console.warn(`Warning: Detector ${detector.name} failed:`, error instanceof Error ? error.message : String(error));
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const isTimeout = errorMsg.includes('timed out');
+
+      console.warn(`⚠️  Detector ${detector.name} ${isTimeout ? 'timed out' : 'failed'}: ${errorMsg}`);
+
+      this.detectorFailures.push({
+        detectorName: detector.name,
+        error: errorMsg,
+        type: isTimeout ? 'timeout' : 'error'
+      });
+
       return null;
     }
   }
@@ -402,5 +437,89 @@ export class AutoDetector {
     }
 
     return filtered;
+  }
+
+  /**
+   * Gets all detector failures encountered during loading and detection.
+   *
+   * @returns {DetectorFailure[]} Array of detector failures
+   *
+   * @example
+   * ```typescript
+   * const autoDetector = new AutoDetector();
+   * await autoDetector.loadDetectors();
+   * await autoDetector.detectAll();
+   *
+   * const failures = autoDetector.getFailures();
+   * if (failures.length > 0) {
+   *   console.log('Some detectors failed:', failures);
+   * }
+   * ```
+   */
+  getFailures(): DetectorFailure[] {
+    return this.detectorFailures;
+  }
+
+  /**
+   * Displays a summary of detector failures if any occurred.
+   *
+   * @example
+   * ```typescript
+   * const autoDetector = new AutoDetector();
+   * await autoDetector.loadDetectors();
+   * await autoDetector.detectAll();
+   * autoDetector.displayFailureSummary();
+   * ```
+   */
+  displayFailureSummary(): void {
+    if (this.detectorFailures.length === 0) {
+      return;
+    }
+
+    console.log('\n⚠️  Detector Failures:');
+
+    const failuresByType = this.detectorFailures.reduce((acc, failure) => {
+      acc[failure.type] = (acc[failure.type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    Object.entries(failuresByType).forEach(([type, count]) => {
+      console.log(`   - ${type}: ${count} detector(s)`);
+    });
+
+    console.log('\n   Details:');
+    this.detectorFailures.forEach(failure => {
+      console.log(`   - ${failure.detectorName}: ${failure.error}`);
+    });
+  }
+
+  /**
+   * Runs all detectors and returns detailed summary including failures.
+   *
+   * @param {string} [ecosystemFilter] - Optional ecosystem name to filter detection
+   * @param {string} [componentTypeFilter] - Optional component type to filter
+   * @returns {Promise<DetectionSummary>} Detection results with failure tracking
+   *
+   * @example
+   * ```typescript
+   * const autoDetector = new AutoDetector();
+   * await autoDetector.loadDetectors();
+   * const summary = await autoDetector.detectAllWithSummary();
+   *
+   * summary.results.forEach((result, ecosystem) => {
+   *   console.log(`${ecosystem}: Found`);
+   * });
+   *
+   * if (summary.failures.length > 0) {
+   *   console.log('Some detectors failed');
+   * }
+   * ```
+   */
+  async detectAllWithSummary(ecosystemFilter?: string, componentTypeFilter?: string): Promise<DetectionSummary> {
+    const results = await this.detectAll(ecosystemFilter, componentTypeFilter);
+    return {
+      results,
+      failures: this.detectorFailures
+    };
   }
 }

@@ -61,6 +61,9 @@ async function main() {
             console.log();
           });
 
+          // Display detector failure summary if any
+          autoDetector.displayFailureSummary();
+
           process.exit(0);
         } catch (error) {
           console.error('❌ Error during auto-detection:', error instanceof Error ? error.message : String(error));
@@ -94,6 +97,9 @@ async function main() {
             });
           });
 
+          // Display detector failure summary if any
+          autoDetector.displayFailureSummary();
+
           process.exit(0);
         } catch (error) {
           console.error('❌ Error:', error instanceof Error ? error.message : String(error));
@@ -105,18 +111,19 @@ async function main() {
       console.log(`🛡️  AI Tool Guard: Scanning ${targetDir}...`);
 
       const scanner = new BaseScanner();
-      const results = await scanner.scanDirectory(targetDir);
+      const summary = await scanner.scanDirectoryWithSummary(targetDir);
 
-      if (results.length === 0) {
+      if (summary.results.length === 0) {
         console.log('✅ No suspicious patterns found.');
+        scanner.displayErrorSummary(summary);
         process.exit(0);
       }
 
-      console.log(`\n⚠️  Found ${results.length} files with suspicious patterns:\n`);
+      console.log(`\n⚠️  Found ${summary.results.length} files with suspicious patterns:\n`);
 
       let totalIssues = 0;
 
-      results.forEach(result => {
+      summary.results.forEach(result => {
         console.log(`📄 File: ${path.relative(process.cwd(), result.filePath)}`);
         result.matches.forEach(match => {
           totalIssues++;
@@ -126,6 +133,7 @@ async function main() {
       });
 
       console.log(`🚨 Scan complete. Found ${totalIssues} potential issues.`);
+      scanner.displayErrorSummary(summary);
       process.exit(1);
     });
 

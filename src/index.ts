@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { BaseScanner } from './scanners/base-scanner';
+import { AutoDetector } from './autodetect';
 import * as path from 'path';
 import { Command } from 'commander';
 import { expandTilde, resolvePath } from './utils/path-utils';
@@ -31,16 +32,76 @@ async function main() {
       // Display scan mode
       if (options.autoDetect) {
         console.log('🤖 Running in automatic detection mode...');
+
+        try {
+          // Use AutoDetector for ecosystem/component detection
+          const autoDetector = new AutoDetector();
+          await autoDetector.loadDetectors();
+
+          console.log(`📦 Loaded ${autoDetector.getDetectorCount()} detectors`);
+
+          if (options.type) {
+            console.log(`🔍 Filtering for component type: ${options.type}`);
+          }
+
+          const results = await autoDetector.detectAll(undefined, options.type);
+
+          if (results.size === 0) {
+            console.log('✅ No AI tools or components detected.');
+            process.exit(0);
+          }
+
+          console.log(`\n🎯 Detected ${results.size} ecosystem(s):\n`);
+
+          results.forEach((result, ecosystem) => {
+            console.log(`📦 ${ecosystem}:`);
+            Object.entries(result.components).forEach(([key, component]) => {
+              console.log(`   ✓ ${key}: ${component.path}`);
+            });
+            console.log();
+          });
+
+          process.exit(0);
+        } catch (error) {
+          console.error('❌ Error during auto-detection:', error instanceof Error ? error.message : String(error));
+          process.exit(1);
+        }
       } else if (options.detectInteractive) {
         console.log('💬 Running in interactive detection mode...');
       } else if (options.detect) {
         console.log(`🎯 Detecting ecosystem: ${options.detect}`);
+
+        try {
+          // Use AutoDetector for specific ecosystem detection
+          const autoDetector = new AutoDetector();
+          await autoDetector.loadDetectors();
+
+          if (options.type) {
+            console.log(`🔍 Filtering for component type: ${options.type}`);
+          }
+
+          const results = await autoDetector.detectAll(options.detect, options.type);
+
+          if (results.size === 0) {
+            console.log(`✅ No components found for ecosystem: ${options.detect}`);
+            process.exit(0);
+          }
+
+          results.forEach((result, ecosystem) => {
+            console.log(`\n📦 ${ecosystem}:`);
+            Object.entries(result.components).forEach(([key, component]) => {
+              console.log(`   ✓ ${key}: ${component.path}`);
+            });
+          });
+
+          process.exit(0);
+        } catch (error) {
+          console.error('❌ Error:', error instanceof Error ? error.message : String(error));
+          process.exit(1);
+        }
       }
 
-      if (options.type) {
-        console.log(`🔍 Filtering for component type: ${options.type}`);
-      }
-
+      // Default scanning mode (existing behavior)
       console.log(`🛡️  AI Tool Guard: Scanning ${targetDir}...`);
 
       const scanner = new BaseScanner();

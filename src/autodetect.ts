@@ -6,7 +6,8 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { AIToolDetector, DetectionResult } from './detectors/base-detector';
+import { AIToolDetector, DetectionResult, ComponentInfo } from './detectors/base-detector';
+import { findClosestMatches } from './utils/string-utils';
 
 /**
  * Orchestrator class that loads and runs all AI tool detectors in parallel.
@@ -118,13 +119,23 @@ export class AutoDetector {
    * Runs all loaded detectors in parallel with timeout protection.
    * Returns only the results for ecosystems where components were found.
    *
+   * @param {string} [ecosystemFilter] - Optional ecosystem name to filter detection (e.g., 'claude-code', 'copilot')
+   * @param {string} [componentTypeFilter] - Optional component type to filter (e.g., 'mcp-server', 'hook', 'skill')
    * @returns {Promise<Map<string, DetectionResult>>} Map of ecosystem names to detection results (only found ecosystems)
    *
    * @example
    * ```typescript
    * const autoDetector = new AutoDetector();
    * await autoDetector.loadDetectors();
+   *
+   * // Detect all ecosystems
    * const results = await autoDetector.detectAll();
+   *
+   * // Detect only Claude Code
+   * const claudeResults = await autoDetector.detectAll('claude-code');
+   *
+   * // Detect only MCP servers across all ecosystems
+   * const mcpResults = await autoDetector.detectAll(undefined, 'mcp-server');
    *
    * if (results.size === 0) {
    *   console.log('No AI tools detected');
@@ -135,11 +146,66 @@ export class AutoDetector {
    * }
    * ```
    */
-  async detectAll(): Promise<Map<string, DetectionResult>> {
+  async detectAll(ecosystemFilter?: string, componentTypeFilter?: string): Promise<Map<string, DetectionResult>> {
     const results = new Map<string, DetectionResult>();
 
+    // Filter detectors by ecosystem if specified
+    let detectorsToRun = this.detectors;
+    if (ecosystemFilter) {
+      // First get available ecosystems for validation and suggestions
+      const availableEcosystems = this.getAvailableEcosystems();
+
+      // Normalize the ecosystem filter (map 'copilot' to 'github-copilot', etc.)
+      const normalizedEcosystem = this.normalizeEcosystemName(ecosystemFilter);
+
+      // Check if the normalized ecosystem exists in available ecosystems
+      if (!availableEcosystems.includes(normalizedEcosystem)) {
+        // Create a list that includes both full names and common short forms for better matching
+        const ecosystemsWithAliases = [
+          ...availableEcosystems,
+          'copilot',    // short for github-copilot
+          'claude',     // short for claude-code
+          'gemini'      // short for google-gemini
+        ];
+
+        const suggestions = findClosestMatches(
+          ecosystemFilter,
+          ecosystemsWithAliases,
+          5  // Increase max distance to catch more typos
+        );
+
+        // Map suggestions back to full ecosystem names
+        const fullNameSuggestions = suggestions.map(s => {
+          if (s === 'copilot') return 'github-copilot';
+          if (s === 'claude') return 'claude-code';
+          if (s === 'gemini') return 'google-gemini';
+          return s;
+        });
+
+        // Remove duplicates from full name suggestions
+        const uniqueSuggestions = [...new Set(fullNameSuggestions)];
+
+        let errorMsg = `Invalid ecosystem name: "${ecosystemFilter}"`;
+        if (uniqueSuggestions.length > 0) {
+          errorMsg += `\n\nDid you mean: ${uniqueSuggestions.join(', ')}?`;
+        }
+        errorMsg += `\n\nAvailable ecosystems: ${availableEcosystems.join(', ')}`;
+
+        throw new Error(errorMsg);
+      }
+
+      // Filter detectors based on normalized ecosystem
+      detectorsToRun = this.detectors.filter(d => {
+        // Match detector name to ecosystem
+        const detectorEcosystem = d.name.replace('-detector', '');
+        return detectorEcosystem === normalizedEcosystem.replace(/-/g, '') ||
+               detectorEcosystem === normalizedEcosystem.replace('github-', '') ||
+               d.name.includes(normalizedEcosystem.replace(/-/g, ''));
+      });
+    }
+
     // Run all detectors in parallel
-    const detectionPromises = this.detectors.map(detector =>
+    const detectionPromises = detectorsToRun.map(detector =>
       this.runDetectorWithTimeout(detector)
     );
 
@@ -148,7 +214,18 @@ export class AutoDetector {
     // Filter and store only the results where components were found
     detectionResults.forEach(result => {
       if (result && result.found) {
-        results.set(result.ecosystem, result);
+        // Apply component type filter if specified
+        if (componentTypeFilter) {
+          const filteredComponents = this.filterComponentsByType(result.components, componentTypeFilter);
+          if (Object.keys(filteredComponents).length > 0) {
+            results.set(result.ecosystem, {
+              ...result,
+              components: filteredComponents
+            });
+          }
+        } else {
+          results.set(result.ecosystem, result);
+        }
       }
     });
 
@@ -215,5 +292,115 @@ export class AutoDetector {
    */
   getDetectorNames(): string[] {
     return this.detectors.map(d => d.name);
+  }
+
+  /**
+   * Gets the list of available ecosystem names based on loaded detectors.
+   *
+   * @returns {string[]} Array of ecosystem names
+   *
+   * @example
+   * ```typescript
+   * const autoDetector = new AutoDetector();
+   * await autoDetector.loadDetectors();
+   * console.log('Available ecosystems:', autoDetector.getAvailableEcosystems().join(', '));
+   * // Output: ['claude-code', 'github-copilot', 'opencode', 'codex', 'google-gemini']
+   * ```
+   */
+  getAvailableEcosystems(): string[] {
+    // Map detector names to ecosystem names
+    // Pattern: <ecosystem>-detector -> <ecosystem>
+    const ecosystems = this.detectors.map(d => {
+      const name = d.name.replace('-detector', '');
+      // Handle special cases - map detector name to canonical ecosystem name
+      if (name === 'claudecode' || name === 'claude-code') return 'claude-code';
+      if (name === 'copilot') return 'github-copilot';
+      if (name === 'gemini') return 'google-gemini';
+      return name;
+    });
+
+    return [...new Set(ecosystems)]; // Remove duplicates
+  }
+
+  /**
+   * Normalizes an ecosystem name to match the canonical format.
+   * Handles common aliases and variations.
+   *
+   * @private
+   * @param {string} name - Ecosystem name to normalize
+   * @returns {string} Normalized ecosystem name
+   *
+   * @example
+   * normalizeEcosystemName('copilot') -> 'github-copilot'
+   * normalizeEcosystemName('claude') -> 'claude-code'
+   * normalizeEcosystemName('gemini') -> 'google-gemini'
+   */
+  private normalizeEcosystemName(name: string): string {
+    const normalized = name.toLowerCase().trim();
+
+    // Handle common aliases
+    const aliases: Record<string, string> = {
+      'copilot': 'github-copilot',
+      'claude': 'claude-code',
+      'gemini': 'google-gemini',
+      'open-code': 'opencode'
+    };
+
+    return aliases[normalized] || normalized;
+  }
+
+  /**
+   * Filters components by type, supporting both exact matches and partial matches.
+   *
+   * @private
+   * @param {Record<string, ComponentInfo>} components - Components to filter
+   * @param {string} typeFilter - Component type to filter by (e.g., 'mcp-server', 'hook', 'skill')
+   * @returns {Record<string, ComponentInfo>} Filtered components
+   *
+   * @example
+   * // Filter for MCP servers
+   * filterComponentsByType(components, 'mcp-server')
+   * // Returns only components with type 'mcp-server'
+   *
+   * // Filter for hooks
+   * filterComponentsByType(components, 'hook')
+   * // Returns only components with type 'hook'
+   */
+  private filterComponentsByType(
+    components: Record<string, ComponentInfo>,
+    typeFilter: string
+  ): Record<string, ComponentInfo> {
+    const filtered: Record<string, ComponentInfo> = {};
+    const normalizedFilter = typeFilter.toLowerCase().trim();
+
+    for (const [key, component] of Object.entries(components)) {
+      // Match by component type field
+      if (component.type && component.type.toLowerCase().includes(normalizedFilter)) {
+        filtered[key] = component;
+        continue;
+      }
+
+      // Match by component key prefix (e.g., 'mcp-server:name')
+      if (key.toLowerCase().startsWith(normalizedFilter + ':')) {
+        filtered[key] = component;
+        continue;
+      }
+
+      // Handle plural forms (e.g., 'hooks' -> 'hook', 'mcp-servers' -> 'mcp-server')
+      const singularFilter = normalizedFilter.endsWith('s')
+        ? normalizedFilter.slice(0, -1)
+        : normalizedFilter;
+
+      if (component.type && component.type.toLowerCase().includes(singularFilter)) {
+        filtered[key] = component;
+        continue;
+      }
+
+      if (key.toLowerCase().startsWith(singularFilter + ':')) {
+        filtered[key] = component;
+      }
+    }
+
+    return filtered;
   }
 }

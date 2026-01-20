@@ -1,0 +1,32 @@
+{
+  "name": "ai-tool-guard",
+  "version": "1.0.0",
+  "description": "Security scanner for AI tools and extensions",
+  "main": "dist/src/index.js",
+  "bin": {
+    "ai-tool-guard": "./dist/src/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/src/index.js",
+    "scan": "npm run build && node dist/src/index.js",
+    "test": "tsc && node --test dist/test/scanner.test.js"
+  },
+  "keywords": [
+    "security",
+    "ai",
+    "mcp",
+    "audit"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "commander": "^14.0.2",
+    "fdir": "^6.5.0",
+    "isbinaryfile": "^6.0.0"
+  }
+}

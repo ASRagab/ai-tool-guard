@@ -4,6 +4,7 @@ import { AutoDetector } from './autodetect';
 import * as path from 'path';
 import { Command } from 'commander';
 import { expandTilde, resolvePath } from './utils/path-utils';
+import prompts from 'prompts';
 
 interface ScanOptions {
   autoDetect?: boolean;
@@ -127,7 +128,159 @@ async function main() {
           process.exit(1);
         }
       } else if (options.detectInteractive) {
-        console.log('💬 Running in interactive detection mode...');
+        console.log('💬 Running in interactive detection mode...\n');
+
+        try {
+          // Use AutoDetector for ecosystem/component detection
+          const autoDetector = new AutoDetector();
+          await autoDetector.loadDetectors();
+
+          // Detection phase with progress indicator
+          console.log('🔍 Detecting...');
+
+          if (options.type) {
+            console.log(`🔍 Filtering for component type: ${options.type}`);
+          }
+
+          const results = await autoDetector.detectAll(undefined, options.type);
+
+          if (results.size === 0) {
+            console.log('✅ No AI tools or components detected.');
+            process.exit(0);
+          }
+
+          // Display detection results grouped by ecosystem with component counts
+          console.log('\n📊 Detection Results:\n');
+
+          const ecosystemData: Array<{ ecosystem: string; componentCount: number; emoji: string }> = [];
+
+          results.forEach((result, ecosystem) => {
+            const componentCount = Object.keys(result.components).length;
+            const ecosystemEmoji = getEcosystemEmoji(ecosystem);
+            ecosystemData.push({ ecosystem, componentCount, emoji: ecosystemEmoji });
+
+            console.log(`${ecosystemEmoji} ${ecosystem}: ${componentCount} component${componentCount > 1 ? 's' : ''}`);
+            Object.entries(result.components).forEach(([key, component]) => {
+              console.log(`   📦 ${key}: ${component.path}`);
+            });
+            console.log();
+          });
+
+          // Prompt: Scan all detected tools?
+          const scanAllResponse = await prompts({
+            type: 'confirm',
+            name: 'scanAll',
+            message: 'Scan all detected tools?',
+            initial: true
+          });
+
+          // Handle user cancellation (Ctrl+C)
+          if (scanAllResponse.scanAll === undefined) {
+            console.log('\n❌ Operation cancelled by user.');
+            process.exit(0);
+          }
+
+          let selectedEcosystems: string[];
+
+          if (scanAllResponse.scanAll) {
+            // Scan all ecosystems
+            selectedEcosystems = Array.from(results.keys());
+          } else {
+            // Show multi-select list with ecosystems as checkboxes
+            const ecosystemChoices = ecosystemData.map(({ ecosystem, componentCount, emoji }) => ({
+              title: `${emoji} ${ecosystem} (${componentCount} component${componentCount > 1 ? 's' : ''})`,
+              value: ecosystem,
+              selected: true  // Default to selected
+            }));
+
+            const ecosystemResponse = await prompts({
+              type: 'multiselect',
+              name: 'ecosystems',
+              message: 'Select ecosystems to scan (use space to toggle, enter to confirm)',
+              choices: ecosystemChoices,
+              hint: '- Space to select. Enter to submit'
+            });
+
+            // Handle user cancellation
+            if (ecosystemResponse.ecosystems === undefined) {
+              console.log('\n❌ Operation cancelled by user.');
+              process.exit(0);
+            }
+
+            selectedEcosystems = ecosystemResponse.ecosystems;
+
+            if (selectedEcosystems.length === 0) {
+              console.log('\n⚠️  No ecosystems selected. Exiting.');
+              process.exit(0);
+            }
+          }
+
+          // Filter results to only selected ecosystems
+          const filteredResults = new Map();
+          selectedEcosystems.forEach(ecosystem => {
+            const result = results.get(ecosystem);
+            if (result) {
+              filteredResults.set(ecosystem, result);
+            }
+          });
+
+          // Calculate total components to scan
+          let totalComponents = 0;
+          filteredResults.forEach((result) => {
+            totalComponents += Object.keys(result.components).length;
+          });
+
+          // Display scanning summary
+          console.log(`\n🔒 Scanning ${selectedEcosystems.length} ecosystem${selectedEcosystems.length > 1 ? 's' : ''}, ${totalComponents} component${totalComponents > 1 ? 's' : ''}...\n`);
+
+          // Scan only selected ecosystems
+          const scanReport = await autoDetector.scanDetected(filteredResults);
+
+          // Display results in same format as automatic mode
+          let hasIssues = false;
+          scanReport.ecosystemReports.forEach((report, ecosystem) => {
+            // Determine ecosystem emoji
+            const ecosystemEmoji = getEcosystemEmoji(ecosystem);
+
+            console.log(`${ecosystemEmoji} ${ecosystem}:`);
+
+            if (report.totalIssues === 0) {
+              console.log(`   ✅ No issues found\n`);
+            } else {
+              hasIssues = true;
+              console.log(`   ⚠️  ${report.totalIssues} issue${report.totalIssues > 1 ? 's' : ''} found`);
+
+              // Display issues by component
+              report.componentScans.forEach((scanResults, componentKey) => {
+                const componentIssues = scanResults.reduce((sum, result) => sum + result.matches.length, 0);
+                if (componentIssues > 0) {
+                  console.log(`   📦 ${componentKey}: ${componentIssues} issue${componentIssues > 1 ? 's' : ''}`);
+
+                  // Display each issue
+                  scanResults.forEach(result => {
+                    result.matches.forEach(match => {
+                      console.log(`      [${match.id}] Line ${match.line}: ${match.description}`);
+                      console.log(`      Code: "${match.match}"`);
+                    });
+                  });
+                }
+              });
+              console.log();
+            }
+          });
+
+          // Display detector failure summary if any
+          autoDetector.displayFailureSummary();
+
+          // Summary footer
+          console.log(`\n🎯 Scan complete. Total issues: ${scanReport.totalIssues}`);
+
+          // Exit with appropriate code
+          process.exit(hasIssues ? 1 : 0);
+        } catch (error) {
+          console.error('❌ Error during interactive detection:', error instanceof Error ? error.message : String(error));
+          process.exit(1);
+        }
       } else if (options.detect) {
         console.log(`🎯 Detecting ecosystem: ${options.detect}`);
 

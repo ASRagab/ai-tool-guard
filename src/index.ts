@@ -12,6 +12,21 @@ interface ScanOptions {
   type?: string;
 }
 
+/**
+ * Get emoji for ecosystem based on name
+ */
+function getEcosystemEmoji(ecosystem: string): string {
+  const emojiMap: Record<string, string> = {
+    'claude-code': '🤖',
+    'github-copilot': '🐙',
+    'google-gemini': '💎',
+    'opencode': '🔓',
+    'codex': '📚'
+  };
+
+  return emojiMap[ecosystem.toLowerCase()] || '🔧';
+}
+
 async function main() {
   const program = new Command();
 
@@ -31,14 +46,15 @@ async function main() {
 
       // Display scan mode
       if (options.autoDetect) {
-        console.log('🤖 Running in automatic detection mode...');
+        console.log('🤖 Running in automatic detection mode...\n');
 
         try {
           // Use AutoDetector for ecosystem/component detection
           const autoDetector = new AutoDetector();
           await autoDetector.loadDetectors();
 
-          console.log(`📦 Loaded ${autoDetector.getDetectorCount()} detectors`);
+          // Detection phase with progress indicator
+          console.log('🔍 Detecting...');
 
           if (options.type) {
             console.log(`🔍 Filtering for component type: ${options.type}`);
@@ -51,20 +67,61 @@ async function main() {
             process.exit(0);
           }
 
-          console.log(`\n🎯 Detected ${results.size} ecosystem(s):\n`);
+          // Calculate total components across all ecosystems
+          let totalComponents = 0;
+          results.forEach((result) => {
+            totalComponents += Object.keys(result.components).length;
+          });
 
-          results.forEach((result, ecosystem) => {
-            console.log(`📦 ${ecosystem}:`);
-            Object.entries(result.components).forEach(([key, component]) => {
-              console.log(`   ✓ ${key}: ${component.path}`);
-            });
-            console.log();
+          // Display detection summary
+          console.log(`\n✅ Found ${results.size} ecosystem${results.size > 1 ? 's' : ''}, ${totalComponents} component${totalComponents > 1 ? 's' : ''}\n`);
+
+          // Scanning phase
+          console.log('🔒 Scanning detected components...\n');
+
+          const scanReport = await autoDetector.scanDetected(results);
+
+          // Display results grouped by ecosystem with emoji indicators
+          let hasIssues = false;
+          scanReport.ecosystemReports.forEach((report, ecosystem) => {
+            // Determine ecosystem emoji
+            const ecosystemEmoji = getEcosystemEmoji(ecosystem);
+
+            console.log(`${ecosystemEmoji} ${ecosystem}:`);
+
+            if (report.totalIssues === 0) {
+              console.log(`   ✅ No issues found\n`);
+            } else {
+              hasIssues = true;
+              console.log(`   ⚠️  ${report.totalIssues} issue${report.totalIssues > 1 ? 's' : ''} found`);
+
+              // Display issues by component
+              report.componentScans.forEach((scanResults, componentKey) => {
+                const componentIssues = scanResults.reduce((sum, result) => sum + result.matches.length, 0);
+                if (componentIssues > 0) {
+                  console.log(`   📦 ${componentKey}: ${componentIssues} issue${componentIssues > 1 ? 's' : ''}`);
+
+                  // Display each issue
+                  scanResults.forEach(result => {
+                    result.matches.forEach(match => {
+                      console.log(`      [${match.id}] Line ${match.line}: ${match.description}`);
+                      console.log(`      Code: "${match.match}"`);
+                    });
+                  });
+                }
+              });
+              console.log();
+            }
           });
 
           // Display detector failure summary if any
           autoDetector.displayFailureSummary();
 
-          process.exit(0);
+          // Summary footer
+          console.log(`\n🎯 Scan complete. Total issues: ${scanReport.totalIssues}`);
+
+          // Exit with appropriate code
+          process.exit(hasIssues ? 1 : 0);
         } catch (error) {
           console.error('❌ Error during auto-detection:', error instanceof Error ? error.message : String(error));
           process.exit(1);

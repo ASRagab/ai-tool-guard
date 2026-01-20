@@ -35,9 +35,23 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const base_scanner_1 = require("./scanners/base-scanner");
+const autodetect_1 = require("./autodetect");
 const path = __importStar(require("path"));
 const commander_1 = require("commander");
 const path_utils_1 = require("./utils/path-utils");
+/**
+ * Get emoji for ecosystem based on name
+ */
+function getEcosystemEmoji(ecosystem) {
+    const emojiMap = {
+        'claude-code': '🤖',
+        'github-copilot': '🐙',
+        'google-gemini': '💎',
+        'opencode': '🔓',
+        'codex': '📚'
+    };
+    return emojiMap[ecosystem.toLowerCase()] || '🔧';
+}
 async function main() {
     const program = new commander_1.Command();
     program
@@ -55,27 +69,116 @@ async function main() {
         const targetDir = await (0, path_utils_1.resolvePath)(expandedPath);
         // Display scan mode
         if (options.autoDetect) {
-            console.log('🤖 Running in automatic detection mode...');
+            console.log('🤖 Running in automatic detection mode...\n');
+            try {
+                // Use AutoDetector for ecosystem/component detection
+                const autoDetector = new autodetect_1.AutoDetector();
+                await autoDetector.loadDetectors();
+                // Detection phase with progress indicator
+                console.log('🔍 Detecting...');
+                if (options.type) {
+                    console.log(`🔍 Filtering for component type: ${options.type}`);
+                }
+                const results = await autoDetector.detectAll(undefined, options.type);
+                if (results.size === 0) {
+                    console.log('✅ No AI tools or components detected.');
+                    process.exit(0);
+                }
+                // Calculate total components across all ecosystems
+                let totalComponents = 0;
+                results.forEach((result) => {
+                    totalComponents += Object.keys(result.components).length;
+                });
+                // Display detection summary
+                console.log(`\n✅ Found ${results.size} ecosystem${results.size > 1 ? 's' : ''}, ${totalComponents} component${totalComponents > 1 ? 's' : ''}\n`);
+                // Scanning phase
+                console.log('🔒 Scanning detected components...\n');
+                const scanReport = await autoDetector.scanDetected(results);
+                // Display results grouped by ecosystem with emoji indicators
+                let hasIssues = false;
+                scanReport.ecosystemReports.forEach((report, ecosystem) => {
+                    // Determine ecosystem emoji
+                    const ecosystemEmoji = getEcosystemEmoji(ecosystem);
+                    console.log(`${ecosystemEmoji} ${ecosystem}:`);
+                    if (report.totalIssues === 0) {
+                        console.log(`   ✅ No issues found\n`);
+                    }
+                    else {
+                        hasIssues = true;
+                        console.log(`   ⚠️  ${report.totalIssues} issue${report.totalIssues > 1 ? 's' : ''} found`);
+                        // Display issues by component
+                        report.componentScans.forEach((scanResults, componentKey) => {
+                            const componentIssues = scanResults.reduce((sum, result) => sum + result.matches.length, 0);
+                            if (componentIssues > 0) {
+                                console.log(`   📦 ${componentKey}: ${componentIssues} issue${componentIssues > 1 ? 's' : ''}`);
+                                // Display each issue
+                                scanResults.forEach(result => {
+                                    result.matches.forEach(match => {
+                                        console.log(`      [${match.id}] Line ${match.line}: ${match.description}`);
+                                        console.log(`      Code: "${match.match}"`);
+                                    });
+                                });
+                            }
+                        });
+                        console.log();
+                    }
+                });
+                // Display detector failure summary if any
+                autoDetector.displayFailureSummary();
+                // Summary footer
+                console.log(`\n🎯 Scan complete. Total issues: ${scanReport.totalIssues}`);
+                // Exit with appropriate code
+                process.exit(hasIssues ? 1 : 0);
+            }
+            catch (error) {
+                console.error('❌ Error during auto-detection:', error instanceof Error ? error.message : String(error));
+                process.exit(1);
+            }
         }
         else if (options.detectInteractive) {
             console.log('💬 Running in interactive detection mode...');
         }
         else if (options.detect) {
             console.log(`🎯 Detecting ecosystem: ${options.detect}`);
+            try {
+                // Use AutoDetector for specific ecosystem detection
+                const autoDetector = new autodetect_1.AutoDetector();
+                await autoDetector.loadDetectors();
+                if (options.type) {
+                    console.log(`🔍 Filtering for component type: ${options.type}`);
+                }
+                const results = await autoDetector.detectAll(options.detect, options.type);
+                if (results.size === 0) {
+                    console.log(`✅ No components found for ecosystem: ${options.detect}`);
+                    process.exit(0);
+                }
+                results.forEach((result, ecosystem) => {
+                    console.log(`\n📦 ${ecosystem}:`);
+                    Object.entries(result.components).forEach(([key, component]) => {
+                        console.log(`   ✓ ${key}: ${component.path}`);
+                    });
+                });
+                // Display detector failure summary if any
+                autoDetector.displayFailureSummary();
+                process.exit(0);
+            }
+            catch (error) {
+                console.error('❌ Error:', error instanceof Error ? error.message : String(error));
+                process.exit(1);
+            }
         }
-        if (options.type) {
-            console.log(`🔍 Filtering for component type: ${options.type}`);
-        }
+        // Default scanning mode (existing behavior)
         console.log(`🛡️  AI Tool Guard: Scanning ${targetDir}...`);
         const scanner = new base_scanner_1.BaseScanner();
-        const results = await scanner.scanDirectory(targetDir);
-        if (results.length === 0) {
+        const summary = await scanner.scanDirectoryWithSummary(targetDir);
+        if (summary.results.length === 0) {
             console.log('✅ No suspicious patterns found.');
+            scanner.displayErrorSummary(summary);
             process.exit(0);
         }
-        console.log(`\n⚠️  Found ${results.length} files with suspicious patterns:\n`);
+        console.log(`\n⚠️  Found ${summary.results.length} files with suspicious patterns:\n`);
         let totalIssues = 0;
-        results.forEach(result => {
+        summary.results.forEach(result => {
             console.log(`📄 File: ${path.relative(process.cwd(), result.filePath)}`);
             result.matches.forEach(match => {
                 totalIssues++;
@@ -84,6 +187,7 @@ async function main() {
             });
         });
         console.log(`🚨 Scan complete. Found ${totalIssues} potential issues.`);
+        scanner.displayErrorSummary(summary);
         process.exit(1);
     });
     await program.parseAsync(process.argv);

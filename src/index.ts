@@ -2,6 +2,7 @@
 import { BaseScanner } from './scanners/base-scanner';
 import * as path from 'path';
 import { Command } from 'commander';
+import { expandTilde, resolvePath } from './utils/path-utils';
 
 interface ScanOptions {
   autoDetect?: boolean;
@@ -23,7 +24,9 @@ async function main() {
     .option('--detect <ecosystem>', 'Single ecosystem detection (e.g., mcp, cursor, vscode)')
     .option('--type <component-type>', 'Filter by specific component type')
     .action(async (targetPath: string, options: ScanOptions) => {
-      const targetDir = path.resolve(targetPath);
+      // Expand tilde and resolve symlinks in the target path
+      const expandedPath = expandTilde(targetPath);
+      const targetDir = await resolvePath(expandedPath);
 
       // Display scan mode
       if (options.autoDetect) {

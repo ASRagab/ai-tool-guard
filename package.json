@@ -10,7 +10,7 @@
     "build": "tsc",
     "start": "node dist/src/index.js",
     "scan": "npm run build && node dist/src/index.js",
-    "test": "tsc && node --test dist/test/scanner.test.js"
+    "test": "tsc && node --test dist/test/scanner.test.js test/path-utils.test.js"
   },
   "keywords": [
     "security",

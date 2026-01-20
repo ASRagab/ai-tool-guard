@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { walkDirectory } from '../walker';
 import { isBinaryFileSync } from 'isbinaryfile';
+import { resolvePath } from '../utils/path-utils';
 
 // Indicators of Compromise (IOCs) from Research
 const SUSPICIOUS_PATTERNS = [
@@ -64,22 +65,25 @@ export class BaseScanner {
 
     for (const file of filesToScan) {
       try {
+        // Resolve symlinks to get the real file path
+        const realPath = await resolvePath(file);
+
         // 1. Binary Check (Fast Fail)
         // We use the sync version here as we are already inside an async loop
         // and want to quickly skip without overhead.
-        if (isBinaryFileSync(file)) {
+        if (isBinaryFileSync(realPath)) {
             continue;
         }
 
         // 2. Size Check (Prevent OOM)
-        const stats = await fs.promises.stat(file);
+        const stats = await fs.promises.stat(realPath);
         if (stats.size > 10 * 1024 * 1024) { // Skip files > 10MB
-            console.warn(`Skipping large file: ${path.basename(file)} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+            console.warn(`Skipping large file: ${path.basename(realPath)} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
             continue;
         }
 
-        const content = await fs.promises.readFile(file, 'utf-8');
-        const result = this.scanFile(file, content);
+        const content = await fs.promises.readFile(realPath, 'utf-8');
+        const result = this.scanFile(file, content); // Use original path for reporting
         if (result.matches.length > 0) {
           results.push(result);
         }

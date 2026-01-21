@@ -1,5 +1,8 @@
 {
-  "name": "ai-tool-guard",
+  "name": "@twelvehart/ai-tool-guard",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "1.0.0",
   "description": "Security scanner for AI tools and extensions",
   "main": "dist/src/index.js",

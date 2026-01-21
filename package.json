@@ -13,6 +13,14 @@
   "bin": {
     "ai-tool-guard": "dist/src/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ASRagab/ai-tool-guard"
+  },
+  "bugs": {
+    "url": "https://github.com/ASRagab/ai-tool-guard/issues"
+  },
+  "homepage": "https://github.com/ASRagab/ai-tool-guard#readme",
   "scripts": {
     "build": "tsc",
     "start": "node dist/src/index.js",
@@ -23,10 +31,14 @@
     "security",
     "ai",
     "mcp",
-    "audit"
+    "audit",
+    "cli",
+    "tool-poisoning",
+    "claude-code",
+    "opencode"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "ASRagab",
+  "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/prompts": "^2.4.9",

@@ -3,3 +3,11 @@ dist/
 *.log
 .DS_Store
 .worktrees/
+
+# AI
+.claude/
+.ralph-tui/
+tasks/
+docs/
+CLAUDE.md
+

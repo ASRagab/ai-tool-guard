@@ -11,7 +11,7 @@
   "main": "dist/src/index.js",
   "type": "module",
   "bin": {
-    "ai-tool-guard": "./dist/src/index.js"
+    "ai-tool-guard": "dist/src/index.js"
   },
   "scripts": {
     "build": "tsc",

@@ -4,6 +4,9 @@
     "access": "public"
   },
   "version": "1.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "description": "Security scanner for AI tools and extensions",
   "main": "dist/src/index.js",
   "type": "module",

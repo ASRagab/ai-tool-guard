@@ -1,28 +1,7 @@
-/**
- * Grouped output formatter for AI tool scan results.
- * Groups results by ecosystem with color coding and summary statistics.
- * @module formatters/grouped-output
- */
-
-import { ScanResult } from '../scanners/base-scanner';
+import { ScanResult, Severity } from '../scanners/base-scanner.js';
 import * as path from 'path';
+import chalk from 'chalk';
 
-/**
- * ANSI color codes for terminal output
- */
-const COLORS = {
-  reset: '\x1b[0m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  red: '\x1b[31m',
-  cyan: '\x1b[36m',
-  bold: '\x1b[1m',
-  dim: '\x1b[2m',
-};
-
-/**
- * Emoji icons for different ecosystems and severity levels
- */
 const ICONS = {
   python: '🐍',
   javascript: '📜',
@@ -37,9 +16,6 @@ const ICONS = {
   issue: '🔍',
 };
 
-/**
- * Grouped scan results by ecosystem
- */
 interface GroupedResults {
   ecosystem: string;
   fileCount: number;
@@ -47,9 +23,6 @@ interface GroupedResults {
   results: ScanResult[];
 }
 
-/**
- * Determines the ecosystem based on file extension
- */
 function getEcosystem(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   const ecosystemMap: Record<string, string> = {
@@ -63,9 +36,6 @@ function getEcosystem(filePath: string): string {
   return ecosystemMap[ext] || 'Other';
 }
 
-/**
- * Gets emoji icon for ecosystem
- */
 function getEcosystemIcon(ecosystem: string): string {
   const iconMap: Record<string, string> = {
     'Python': ICONS.python,
@@ -78,37 +48,24 @@ function getEcosystemIcon(ecosystem: string): string {
   return iconMap[ecosystem] || '📦';
 }
 
-/**
- * Determines severity based on issue type
- */
-function getSeverity(issueId: string): 'clean' | 'warning' | 'critical' {
-  const criticalPatterns = ['CURL_BASH', 'PY_EXEC', 'JS_EXEC', 'HARDCODED_IP'];
-  const warningPatterns = ['PY_NETWORK', 'JS_NETWORK', 'PY_FILE_ACCESS', 'JS_FILE_ACCESS'];
-
-  if (criticalPatterns.includes(issueId)) return 'critical';
-  if (warningPatterns.includes(issueId)) return 'warning';
-  return 'warning'; // Default to warning for unknown patterns
+function mapSeverityToDisplay(severity: Severity): 'clean' | 'warning' | 'critical' {
+  if (severity === 'critical') return 'critical';
+  if (severity === 'high' || severity === 'medium') return 'warning';
+  return 'clean';
 }
 
-/**
- * Gets color based on severity
- */
-function getSeverityColor(severity: 'clean' | 'warning' | 'critical'): string {
+function getSeverityChalk(severity: 'clean' | 'warning' | 'critical') {
   switch (severity) {
-    case 'clean': return COLORS.green;
-    case 'warning': return COLORS.yellow;
-    case 'critical': return COLORS.red;
+    case 'clean': return chalk.green;
+    case 'warning': return chalk.yellow;
+    case 'critical': return chalk.red;
   }
 }
 
-/**
- * Groups scan results by ecosystem
- */
 function groupByEcosystem(results: ScanResult[]): GroupedResults[] {
   const groups = new Map<string, ScanResult[]>();
 
-  // Group results by ecosystem
-  results.forEach(result => {
+   results.forEach(result => {
     const ecosystem = getEcosystem(result.filePath);
     if (!groups.has(ecosystem)) {
       groups.set(ecosystem, []);
@@ -116,25 +73,18 @@ function groupByEcosystem(results: ScanResult[]): GroupedResults[] {
     groups.get(ecosystem)!.push(result);
   });
 
-  // Convert to array and calculate statistics
-  return Array.from(groups.entries()).map(([ecosystem, results]) => ({
+   return Array.from(groups.entries()).map(([ecosystem, results]) => ({
     ecosystem,
     fileCount: results.length,
     issueCount: results.reduce((sum, r) => sum + r.matches.length, 0),
     results,
-  })).sort((a, b) => b.issueCount - a.issueCount); // Sort by issue count descending
+   })).sort((a, b) => b.issueCount - a.issueCount);
 }
 
-/**
- * Prints a separator line
- */
 function printSeparator(char: string = '─', length: number = 80): void {
-  console.log(COLORS.dim + char.repeat(length) + COLORS.reset);
+  console.log(chalk.dim(char.repeat(length)));
 }
 
-/**
- * Prints ecosystem header with emoji and statistics
- */
 function printEcosystemHeader(group: GroupedResults): void {
   const icon = getEcosystemIcon(group.ecosystem);
   const severityIcon = group.issueCount > 10 ? ICONS.critical :
@@ -143,107 +93,111 @@ function printEcosystemHeader(group: GroupedResults): void {
   console.log();
   printSeparator('═');
   console.log(
-    `${COLORS.bold}${COLORS.cyan}${icon}  ${group.ecosystem} Ecosystem${COLORS.reset} ${severityIcon}`
+    chalk.bold.cyan(`${icon}  ${group.ecosystem} Ecosystem`) + ` ${severityIcon}`
   );
   printSeparator('═');
   console.log(
-    `${COLORS.bold}Files Scanned:${COLORS.reset} ${group.fileCount}  |  ` +
-    `${COLORS.bold}Total Issues:${COLORS.reset} ${group.issueCount}`
+    `${chalk.bold('Files Scanned:')} ${group.fileCount}  |  ` +
+    `${chalk.bold('Total Issues:')} ${group.issueCount}`
   );
   printSeparator();
 }
 
-/**
- * Truncates text to specified length with ellipsis
- */
 function truncate(text: string, maxLength: number = 100): string {
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength - 3) + '...';
 }
 
-/**
- * Prints file results with color-coded severity
- */
 function printFileResults(result: ScanResult, baseDir: string): void {
-  const relativePath = path.relative(baseDir, result.filePath);
-  console.log(`\n${ICONS.file} ${COLORS.bold}${relativePath}${COLORS.reset}`);
+  const fullPath = path.resolve(result.filePath);
+  console.log(`\n${ICONS.file} ${chalk.bold(fullPath)}`);
 
-  result.matches.forEach(match => {
-    const severity = getSeverity(match.id);
-    const color = getSeverityColor(severity);
-    const icon = severity === 'critical' ? ICONS.critical : ICONS.warning;
+  const criticalMatches = result.matches.filter(match => match.severity === 'critical' || match.severity === 'high');
+  const nonCriticalMatches = result.matches.filter(match => match.severity === 'medium' || match.severity === 'low');
+
+  if (nonCriticalMatches.length > 0) {
+    console.log(chalk.yellow(`  ${ICONS.warning} ${nonCriticalMatches.length} warning${nonCriticalMatches.length > 1 ? 's' : ''} (medium/low, grouped)`));
+  }
+
+  criticalMatches.forEach(match => {
+    const displaySeverity = mapSeverityToDisplay(match.severity);
+    const colorFn = getSeverityChalk(displaySeverity);
+    const icon = displaySeverity === 'critical' ? ICONS.critical : ICONS.warning;
 
     console.log(
-      `  ${icon} ${color}[${match.id}]${COLORS.reset} Line ${match.line}: ${match.description}`
+      `  ${icon} ${colorFn(`[${match.category}]`)} Line ${match.line}: ${match.description}`
     );
-    console.log(`     ${COLORS.dim}${truncate(match.match, 100)}${COLORS.reset}`);
+
+    if (match.contextBefore.length > 0) {
+      match.contextBefore.forEach((line, idx) => {
+        const lineNum = match.line - match.contextBefore.length + idx;
+        console.log(chalk.dim(`     ${lineNum} | ${line}`));
+      });
+    }
+
+    console.log(chalk.bold(`  →  ${match.line} | ${truncate(match.match, 100)}`));
+
+    if (match.contextAfter.length > 0) {
+      match.contextAfter.forEach((line, idx) => {
+        const lineNum = match.line + idx + 1;
+        console.log(chalk.dim(`     ${lineNum} | ${line}`));
+      });
+    }
+
+    console.log();
   });
 }
 
-/**
- * Prints final summary across all ecosystems
- */
 function printSummary(groups: GroupedResults[]): void {
   const totalFiles = groups.reduce((sum, g) => sum + g.fileCount, 0);
   const totalIssues = groups.reduce((sum, g) => sum + g.issueCount, 0);
   const criticalCount = groups.reduce((sum, g) =>
     sum + g.results.reduce((s, r) =>
-      s + r.matches.filter(m => getSeverity(m.id) === 'critical').length, 0
+      s + r.matches.filter(m => m.severity === 'critical').length, 0
     ), 0
   );
   const warningCount = totalIssues - criticalCount;
 
   console.log();
   printSeparator('═');
-  console.log(`${COLORS.bold}${COLORS.cyan}📊 SCAN SUMMARY${COLORS.reset}`);
+  console.log(chalk.bold.cyan('📊 SCAN SUMMARY'));
   printSeparator('═');
-  console.log(`${COLORS.bold}Total Ecosystems:${COLORS.reset} ${groups.length}`);
-  console.log(`${COLORS.bold}Total Files:${COLORS.reset} ${totalFiles}`);
-  console.log(`${COLORS.bold}Total Issues:${COLORS.reset} ${totalIssues}`);
+  console.log(`${chalk.bold('Total Ecosystems:')} ${groups.length}`);
+  console.log(`${chalk.bold('Total Files:')} ${totalFiles}`);
+  console.log(`${chalk.bold('Total Issues:')} ${totalIssues}`);
   console.log(
-    `  ${COLORS.red}${ICONS.critical} Critical:${COLORS.reset} ${criticalCount}  |  ` +
-    `${COLORS.yellow}${ICONS.warning} Warnings:${COLORS.reset} ${warningCount}`
+    `  ${chalk.red(`${ICONS.critical} Critical:`)} ${criticalCount}  |  ` +
+    `${chalk.yellow(`${ICONS.warning} Warnings:`)} ${warningCount}`
   );
   printSeparator('═');
 
   if (criticalCount > 0) {
-    console.log(`\n${COLORS.red}${COLORS.bold}${ICONS.critical} CRITICAL ISSUES DETECTED!${COLORS.reset}`);
+    console.log(`\n${chalk.red.bold(`${ICONS.critical} CRITICAL ISSUES DETECTED!`)}`);
   } else if (warningCount > 0) {
-    console.log(`\n${COLORS.yellow}${ICONS.warning} Review warnings to ensure security.${COLORS.reset}`);
+    console.log(`\n${chalk.yellow(`${ICONS.warning} Review warnings to ensure security.`)}`);
   } else {
-    console.log(`\n${COLORS.green}${ICONS.clean} No issues detected. Clean scan!${COLORS.reset}`);
+    console.log(`\n${chalk.green(`${ICONS.clean} No issues detected. Clean scan!`)}`);
   }
 }
 
-/**
- * Formats and displays scan results grouped by ecosystem
- *
- * @param results - Array of scan results to format
- * @param baseDir - Base directory for calculating relative paths (defaults to current working directory)
- */
 export function formatGroupedOutput(results: ScanResult[], baseDir: string = process.cwd()): void {
   if (results.length === 0) {
-    console.log(`${COLORS.green}${ICONS.clean} No suspicious patterns found. Clean scan!${COLORS.reset}`);
+    console.log(chalk.green(`${ICONS.clean} No suspicious patterns found. Clean scan!`));
     return;
   }
 
   const groups = groupByEcosystem(results);
 
-  console.log(`\n${COLORS.bold}${COLORS.cyan}🛡️  AI Tool Guard - Grouped Scan Results${COLORS.reset}`);
+  console.log(`\n${chalk.bold.cyan('🛡️  AI Tool Guard - Grouped Scan Results')}`);
 
-  // Print each ecosystem group
   groups.forEach(group => {
     printEcosystemHeader(group);
     group.results.forEach(result => printFileResults(result, baseDir));
   });
 
-  // Print final summary
   printSummary(groups);
 }
 
-/**
- * Formats grouped output with no color (for CI/CD environments)
- */
 export function formatGroupedOutputNoColor(results: ScanResult[], baseDir: string = process.cwd()): void {
   if (results.length === 0) {
     console.log('No suspicious patterns found. Clean scan!');
@@ -261,12 +215,35 @@ export function formatGroupedOutputNoColor(results: ScanResult[], baseDir: strin
     console.log('-----------------------------------');
 
     group.results.forEach(result => {
-      const relativePath = path.relative(baseDir, result.filePath);
-      console.log(`\nFile: ${relativePath}`);
+      const fullPath = path.resolve(result.filePath);
+      console.log(`\nFile: ${fullPath}`);
 
-      result.matches.forEach(match => {
+      const criticalMatches = result.matches.filter(match => match.severity === 'critical' || match.severity === 'high');
+      const nonCriticalMatches = result.matches.filter(match => match.severity === 'medium' || match.severity === 'low');
+
+      if (nonCriticalMatches.length > 0) {
+        console.log(`  Warnings (grouped): ${nonCriticalMatches.length}`);
+      }
+
+      criticalMatches.forEach(match => {
         console.log(`  [${match.id}] Line ${match.line}: ${match.description}`);
         console.log(`  Code: ${truncate(match.match, 100)}`);
+
+        if (match.contextBefore.length > 0) {
+          match.contextBefore.forEach((line, idx) => {
+            const lineNum = match.line - match.contextBefore.length + idx;
+            console.log(`    ${lineNum} | ${line}`);
+          });
+        }
+
+        console.log(`  → ${match.line} | ${match.match}`);
+
+        if (match.contextAfter.length > 0) {
+          match.contextAfter.forEach((line, idx) => {
+            const lineNum = match.line + idx + 1;
+            console.log(`    ${lineNum} | ${line}`);
+          });
+        }
       });
     });
   });

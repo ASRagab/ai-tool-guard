@@ -6,8 +6,9 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { AIToolDetector, ComponentInfo, DetectionResult } from './base-detector';
-import { expandTilde, parsePATH, resolvePath, isSymlink } from '../utils/path-utils';
+import { AIToolDetector, ComponentInfo, DetectionResult } from './base-detector.js';
+import { expandTilde, parsePATH, resolvePath, isSymlink } from '../utils/path-utils.js';
+import { detectDirectory } from '../utils/detector-utils.js';
 
 /**
  * Detector for OpenCode CLI and its components.
@@ -148,7 +149,7 @@ export class OpenCodeDetector implements AIToolDetector {
     for (const basePath of scanPaths) {
       // Detect plugins directory
       const pluginsPath = path.join(basePath, 'plugins');
-      const plugins = await this.detectDirectory(pluginsPath, 'plugin');
+      const plugins = await detectDirectory(pluginsPath, 'plugin');
       plugins.forEach(comp => {
         components[`plugin:${comp.name}`] = comp;
       });
@@ -168,42 +169,7 @@ export class OpenCodeDetector implements AIToolDetector {
     };
   }
 
-  /**
-   * Detects components in a directory by reading all entries.
-   * Categorizes entries by the specified type.
-   *
-   * @private
-   * @param {string} dirPath - Directory path to scan
-   * @param {string} componentType - Type classification for detected components
-   * @returns {Promise<ComponentInfo[]>} Array of detected components
-   */
-  private async detectDirectory(dirPath: string, componentType: string): Promise<ComponentInfo[]> {
-    const components: ComponentInfo[] = [];
-
-    try {
-      const entries = await fs.readdir(dirPath, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-
-        // Skip hidden files/directories (starting with .)
-        if (entry.name.startsWith('.')) {
-          continue;
-        }
-
-        components.push({
-          name: entry.name,
-          path: fullPath,
-          type: componentType
-        });
-      }
-    } catch (error) {
-      // Directory doesn't exist or isn't accessible - return empty array
-      return [];
-    }
-
-    return components;
-  }
+  // detectDirectory is now imported from utils/detector-utils.ts
 
   /**
    * Detects configuration files in the OpenCode directory.

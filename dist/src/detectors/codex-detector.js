@@ -1,47 +1,11 @@
-"use strict";
 /**
  * Codex CLI Detector - detects Codex CLI installation and components
  * Scans for Codex executables and config files
  * @module detectors/codex-detector
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.CodexDetector = void 0;
-const fs_1 = require("fs");
-const path = __importStar(require("path"));
-const path_utils_1 = require("../utils/path-utils");
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import { expandTilde, parsePATH, resolvePath, isSymlink } from '../utils/path-utils.js';
 /**
  * Detector for Codex CLI and its components.
  * Searches for:
@@ -64,7 +28,7 @@ const path_utils_1 = require("../utils/path-utils");
  * }
  * ```
  */
-class CodexDetector {
+export class CodexDetector {
     constructor() {
         this.name = 'codex-detector';
     }
@@ -85,8 +49,8 @@ class CodexDetector {
      */
     getPaths() {
         return [
-            (0, path_utils_1.expandTilde)('~/.codex/'),
-            (0, path_utils_1.expandTilde)('~/.config/codex/')
+            expandTilde('~/.codex/'),
+            expandTilde('~/.config/codex/')
         ];
     }
     /**
@@ -108,12 +72,12 @@ class CodexDetector {
      */
     async checkPATH() {
         const components = [];
-        const pathDirs = (0, path_utils_1.parsePATH)();
+        const pathDirs = parsePATH();
         const foundExecutables = new Set();
         for (const dir of pathDirs) {
             try {
                 // Get all files in the directory
-                const entries = await fs_1.promises.readdir(dir, { withFileTypes: true });
+                const entries = await fs.readdir(dir, { withFileTypes: true });
                 for (const entry of entries) {
                     // Skip directories
                     if (entry.isDirectory()) {
@@ -124,7 +88,7 @@ class CodexDetector {
                         const fullPath = path.join(dir, entry.name);
                         // Check if the file is executable
                         try {
-                            await fs_1.promises.access(fullPath, fs_1.promises.constants.X_OK);
+                            await fs.access(fullPath, fs.constants.X_OK);
                         }
                         catch {
                             // Not executable, skip
@@ -137,9 +101,9 @@ class CodexDetector {
                         foundExecutables.add(entry.name);
                         // Resolve symlinks to get the real path
                         let resolvedPath = fullPath;
-                        if (await (0, path_utils_1.isSymlink)(fullPath)) {
+                        if (await isSymlink(fullPath)) {
                             try {
-                                resolvedPath = await (0, path_utils_1.resolvePath)(fullPath);
+                                resolvedPath = await resolvePath(fullPath);
                             }
                             catch {
                                 // If symlink resolution fails, use the original path
@@ -215,8 +179,8 @@ class CodexDetector {
      */
     async extractVersion(executablePath) {
         try {
-            const { execFile } = await Promise.resolve().then(() => __importStar(require('child_process')));
-            const { promisify } = await Promise.resolve().then(() => __importStar(require('util')));
+            const { execFile } = await import('child_process');
+            const { promisify } = await import('util');
             const execFileAsync = promisify(execFile);
             // Try common version flags
             const versionFlags = ['--version', '-v', 'version'];
@@ -258,7 +222,7 @@ class CodexDetector {
         const configExtensions = ['.json', '.yaml', '.yml', '.toml', '.ini'];
         const configNames = ['config', '.codexrc'];
         try {
-            const entries = await fs_1.promises.readdir(dirPath, { withFileTypes: true });
+            const entries = await fs.readdir(dirPath, { withFileTypes: true });
             for (const entry of entries) {
                 // Only check files, not directories
                 if (!entry.isFile()) {
@@ -286,4 +250,3 @@ class CodexDetector {
         return components;
     }
 }
-exports.CodexDetector = CodexDetector;

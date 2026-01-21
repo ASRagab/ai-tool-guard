@@ -1,47 +1,12 @@
-"use strict";
 /**
  * Gemini Detector - detects Google AI Studio/Gemini Code Assist integrations
  * Scans for Gemini extensions and configuration in VS Code and Cursor directories
  * @module detectors/gemini-detector
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.GeminiDetector = void 0;
-const fs_1 = require("fs");
-const path = __importStar(require("path"));
-const path_utils_1 = require("../utils/path-utils");
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import { expandTilde } from '../utils/path-utils.js';
+import { readExtensionMetadata } from '../utils/detector-utils.js';
 /**
  * Detector for Google Gemini Code Assist extensions in VS Code and Cursor.
  * Searches for:
@@ -66,7 +31,7 @@ const path_utils_1 = require("../utils/path-utils");
  * }
  * ```
  */
-class GeminiDetector {
+export class GeminiDetector {
     constructor() {
         this.name = 'gemini-detector';
     }
@@ -87,8 +52,8 @@ class GeminiDetector {
      */
     getPaths() {
         return [
-            (0, path_utils_1.expandTilde)('~/.vscode/extensions/'),
-            (0, path_utils_1.expandTilde)('~/.cursor/extensions/')
+            expandTilde('~/.vscode/extensions/'),
+            expandTilde('~/.cursor/extensions/')
         ];
     }
     /**
@@ -134,7 +99,7 @@ class GeminiDetector {
             });
         }
         // Parse VS Code settings.json for Gemini configuration
-        const settingsPath = (0, path_utils_1.expandTilde)('~/.config/Code/User/settings.json');
+        const settingsPath = expandTilde('~/.config/Code/User/settings.json');
         const configComponents = await this.detectGeminiConfig(settingsPath);
         configComponents.forEach(comp => {
             components[`config:${comp.name}`] = comp;
@@ -181,7 +146,7 @@ class GeminiDetector {
     async detectGeminiExtensions(extensionsPath) {
         const components = [];
         try {
-            const entries = await fs_1.promises.readdir(extensionsPath, { withFileTypes: true });
+            const entries = await fs.readdir(extensionsPath, { withFileTypes: true });
             for (const entry of entries) {
                 // Only check directories
                 if (!entry.isDirectory()) {
@@ -203,7 +168,7 @@ class GeminiDetector {
                 }
                 const [, extensionName, version] = match;
                 // Try to read package.json for additional metadata
-                const metadata = await this.readExtensionMetadata(fullPath);
+                const metadata = await readExtensionMetadata(fullPath);
                 // Store version in the name if available, or keep original extension name
                 const displayName = metadata?.version
                     ? `${extensionName}@${metadata.version}`
@@ -221,30 +186,7 @@ class GeminiDetector {
         }
         return components;
     }
-    /**
-     * Reads extension metadata from package.json file.
-     *
-     * @private
-     * @param {string} extensionPath - Path to the extension directory
-     * @returns {Promise<Record<string, any> | null>} Extension metadata or null if not found
-     */
-    async readExtensionMetadata(extensionPath) {
-        try {
-            const packageJsonPath = path.join(extensionPath, 'package.json');
-            const content = await fs_1.promises.readFile(packageJsonPath, 'utf-8');
-            const packageJson = JSON.parse(content);
-            return {
-                version: packageJson.version,
-                displayName: packageJson.displayName,
-                description: packageJson.description,
-                publisher: packageJson.publisher
-            };
-        }
-        catch (error) {
-            // package.json doesn't exist or invalid JSON
-            return null;
-        }
-    }
+    // readExtensionMetadata is now imported from utils/detector-utils.ts
     /**
      * Parses VS Code settings.json to extract Gemini configuration.
      * Looks for Gemini-related settings like geminicodeassist.*.
@@ -287,7 +229,7 @@ class GeminiDetector {
     async detectGeminiConfig(settingsPath) {
         const components = [];
         try {
-            const content = await fs_1.promises.readFile(settingsPath, 'utf-8');
+            const content = await fs.readFile(settingsPath, 'utf-8');
             const settings = JSON.parse(content);
             // Look for Gemini-related settings (settings starting with 'geminicodeassist' or 'cloudcode.gemini')
             for (const [key] of Object.entries(settings)) {
@@ -307,4 +249,3 @@ class GeminiDetector {
         return components;
     }
 }
-exports.GeminiDetector = GeminiDetector;

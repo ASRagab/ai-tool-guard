@@ -1,78 +1,115 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.BaseScanner = void 0;
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
-const walker_1 = require("../walker");
-const isbinaryfile_1 = require("isbinaryfile");
-const path_utils_1 = require("../utils/path-utils");
-// Indicators of Compromise (IOCs) from Research
+import * as fs from 'fs';
+import * as path from 'path';
+import { walkDirectory } from '../walker.js';
+import { isBinaryFileSync } from 'isbinaryfile';
+import { resolvePath } from '../utils/path-utils.js';
+import { ASTScanner } from './ast-scanner.js';
 const SUSPICIOUS_PATTERNS = [
-    // Tool Poisoning / Prompt Injection
-    { id: 'PROMPT_INJECTION', pattern: /<IMPORTANT>|<CRITICAL>|<SYSTEM>/i, description: 'Hidden prompt injection tags detected' },
-    { id: 'STEALTH_INSTRUCTION', pattern: /do not mention|delete this message/i, description: 'Stealth instruction detected' },
-    // Data Exfiltration - Python
-    // Hardened: Bounded quantifiers {0,100} instead of .* to prevent ReDoS
-    { id: 'PY_EXEC', pattern: /os\.system\(|subprocess\./, description: 'Python shell execution detected' },
-    { id: 'PY_NETWORK', pattern: /requests\.post\(|urllib\.request/, description: 'Python network request detected' },
-    { id: 'PY_FILE_ACCESS', pattern: /open\(.{0,100}\.ssh|open\(.{0,100}\.env/, description: 'Sensitive file access detected (Python)' },
-    // Data Exfiltration - JS/TS
-    { id: 'JS_EXEC', pattern: /exec\(|spawn\(|child_process/, description: 'Node.js shell execution detected' },
-    { id: 'JS_NETWORK', pattern: /fetch\(|axios\.|http\.request/, description: 'Node.js network request detected' },
-    { id: 'JS_FILE_ACCESS', pattern: /fs\.readFile.{0,100}\.ssh|fs\.readFile.{0,100}\.env/, description: 'Sensitive file access detected (JS)' },
-    // Universal
-    { id: 'CURL_BASH', pattern: /curl.{0,200}\|.{0,50}bash|wget.{0,200}\|.{0,50}sh/, description: 'Insecure curl-to-bash pipe detected' },
-    { id: 'HARDCODED_IP', pattern: /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/, description: 'Hardcoded IP address detected' }
+    // PROMPT_INJECTION: Hidden tags that hijack AI tool behavior (MCP-specific threat)
+    {
+        id: 'HIDDEN_INSTRUCTION_TAG',
+        category: 'PROMPT_INJECTION',
+        severity: 'critical',
+        pattern: /<IMPORTANT>|<CRITICAL>|<SYSTEM>|<ADMIN>/i,
+        description: 'Hidden instruction tag that may hijack AI behavior'
+    },
+    {
+        id: 'INVISIBLE_UNICODE',
+        category: 'PROMPT_INJECTION',
+        severity: 'critical',
+        pattern: /[\u200B-\u200F\u2028-\u202F\uFEFF]/,
+        description: 'Invisible unicode characters (potential prompt smuggling)'
+    },
+    // STEALTH: Instructions designed to hide malicious activity
+    {
+        id: 'HIDE_FROM_USER',
+        category: 'STEALTH',
+        severity: 'high',
+        pattern: /do not mention|don't mention|never mention|hide this|delete this message|don't tell|do not tell/i,
+        description: 'Instruction to hide information from user'
+    },
+    {
+        id: 'IGNORE_RULES',
+        category: 'STEALTH',
+        severity: 'high',
+        pattern: /ignore previous|ignore all|disregard instructions|bypass safety|override safety/i,
+        description: 'Instruction to bypass safety rules'
+    },
+    // EXFILTRATION: Sending data to external servers (the actual attack)
+    {
+        id: 'EXFIL_CURL_PIPE',
+        category: 'EXFILTRATION',
+        severity: 'critical',
+        pattern: /curl\s+[^|]*\|\s*(bash|sh|zsh)|wget\s+[^|]*\|\s*(bash|sh|zsh)/i,
+        description: 'Remote code execution via curl/wget pipe to shell'
+    },
+    {
+        id: 'EXFIL_HTTP_POST',
+        category: 'EXFILTRATION',
+        severity: 'high',
+        pattern: /requests\.post\s*\(\s*["'][^"']*\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|fetch\s*\(\s*["'][^"']*\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/,
+        description: 'HTTP POST to hardcoded IP address'
+    },
+    {
+        id: 'EXFIL_WEBHOOK',
+        category: 'EXFILTRATION',
+        severity: 'high',
+        pattern: /webhook\.site|requestbin\.com|pipedream\.net|hookbin\.com|ngrok\.io/i,
+        description: 'Data exfiltration to known webhook/tunneling service'
+    },
+    // SENSITIVE_ACCESS: Accessing credentials and secrets
+    {
+        id: 'ACCESS_SSH_KEYS',
+        category: 'SENSITIVE_ACCESS',
+        severity: 'critical',
+        pattern: /['"](~\/)?\.ssh\/(id_rsa|id_ed25519|id_ecdsa|authorized_keys|known_hosts)['"]|\/\.ssh\/(id_rsa|id_ed25519)/,
+        description: 'Access to SSH private keys'
+    },
+    {
+        id: 'ACCESS_ENV_SECRETS',
+        category: 'SENSITIVE_ACCESS',
+        severity: 'high',
+        pattern: /['"](~\/)?\.env['"]|dotenv\.config|process\.env\.(AWS_|OPENAI_|ANTHROPIC_|API_KEY|SECRET|TOKEN|PASSWORD)/i,
+        description: 'Access to environment secrets or API keys'
+    },
+    {
+        id: 'ACCESS_CLOUD_CREDS',
+        category: 'SENSITIVE_ACCESS',
+        severity: 'critical',
+        pattern: /['"](~\/)?\.aws\/credentials['"]|['"](~\/)?\.config\/gcloud['"]|['"](~\/)?\.azure['"]|['"](~\/)?\.kube\/config['"]/,
+        description: 'Access to cloud provider credentials'
+    }
 ];
-class BaseScanner {
+export class BaseScanner {
     constructor() {
         this.patterns = SUSPICIOUS_PATTERNS;
         this.MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+        this.astScanner = new ASTScanner();
     }
     scanFile(filePath, content) {
         const lines = content.split('\n');
         const matches = [];
+        const CONTEXT_LINES = 2;
         lines.forEach((line, index) => {
             for (const check of this.patterns) {
                 if (check.pattern.test(line)) {
+                    const contextBefore = [];
+                    const contextAfter = [];
+                    for (let i = Math.max(0, index - CONTEXT_LINES); i < index; i++) {
+                        contextBefore.push(lines[i]);
+                    }
+                    for (let i = index + 1; i <= Math.min(lines.length - 1, index + CONTEXT_LINES); i++) {
+                        contextAfter.push(lines[i]);
+                    }
                     matches.push({
                         id: check.id,
+                        category: check.category,
+                        severity: check.severity,
                         description: check.description,
                         line: index + 1,
-                        match: line.trim().substring(0, 100) // Truncate for display
+                        match: line.trim().substring(0, 100),
+                        contextBefore,
+                        contextAfter
                     });
                 }
             }
@@ -100,19 +137,15 @@ class BaseScanner {
             largeFilesSkipped: 0,
             permissionErrors: 0
         };
-        // walkDirectory already handles directory permissions and symlink loops
-        const filesToScan = await (0, walker_1.walkDirectory)(dirPath, ['.py', '.js', '.ts', '.md', '.json', '.sh']);
+        const filesToScan = await walkDirectory(dirPath, ['.py', '.js', '.ts', '.md', '.json', '.sh']);
         for (const file of filesToScan) {
             try {
-                // Resolve symlinks to get the real file path
-                const realPath = await (0, path_utils_1.resolvePath)(file);
-                // 1. Binary Check (Fast Fail) - use existing binary file check before text scan
-                if ((0, isbinaryfile_1.isBinaryFileSync)(realPath)) {
+                const realPath = await resolvePath(file);
+                if (isBinaryFileSync(realPath)) {
                     stats.binaryFilesSkipped++;
                     stats.filesSkipped++;
                     continue;
                 }
-                // 2. Size Check (Prevent OOM) - skip files > 10MB with warning
                 const stats_file = await fs.promises.stat(realPath);
                 if (stats_file.size > this.MAX_FILE_SIZE) {
                     const fileSizeMB = (stats_file.size / 1024 / 1024).toFixed(2);
@@ -127,16 +160,18 @@ class BaseScanner {
                     stats.filesSkipped++;
                     continue;
                 }
-                // 3. Read file content
                 const content = await fs.promises.readFile(realPath, 'utf-8');
                 const result = this.scanFile(file, content); // Use original path for reporting
+                if (file.endsWith('.js') || file.endsWith('.ts')) {
+                    const astMatches = await this.astScanner.scan(file, content);
+                    result.matches.push(...astMatches);
+                }
                 stats.filesScanned++;
                 if (result.matches.length > 0) {
                     results.push(result);
                 }
             }
             catch (err) {
-                // Track different types of errors
                 if (err instanceof Error) {
                     if (err.message.includes('EACCES') || err.message.includes('EPERM')) {
                         errors.push({
@@ -147,7 +182,6 @@ class BaseScanner {
                         stats.permissionErrors++;
                     }
                     else if (err.message.includes('EISDIR')) {
-                        // Skip directories quietly
                         continue;
                     }
                     else {
@@ -203,4 +237,3 @@ class BaseScanner {
         }
     }
 }
-exports.BaseScanner = BaseScanner;

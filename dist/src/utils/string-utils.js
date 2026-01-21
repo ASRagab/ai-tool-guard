@@ -1,11 +1,7 @@
-"use strict";
 /**
  * String utility functions for fuzzy matching and suggestions.
  * @module utils/string-utils
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.levenshteinDistance = levenshteinDistance;
-exports.findClosestMatches = findClosestMatches;
 /**
  * Calculates the Levenshtein distance between two strings.
  * The Levenshtein distance is the minimum number of single-character edits
@@ -22,7 +18,7 @@ exports.findClosestMatches = findClosestMatches;
  * levenshteinDistance('copilot', 'copiot'); // Returns 1
  * ```
  */
-function levenshteinDistance(a, b) {
+export function levenshteinDistance(a, b) {
     // Normalize strings to lowercase for case-insensitive comparison
     const str1 = a.toLowerCase();
     const str2 = b.toLowerCase();
@@ -73,7 +69,7 @@ function levenshteinDistance(a, b) {
  * findClosestMatches('xyz', ecosystems); // Returns [] (no close matches)
  * ```
  */
-function findClosestMatches(target, candidates, maxDistance = 3, maxSuggestions = 3) {
+export function findClosestMatches(target, candidates, maxDistance = 3, maxSuggestions = 3) {
     // Calculate distances for all candidates
     const distances = candidates.map(candidate => ({
         value: candidate,

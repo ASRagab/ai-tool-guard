@@ -1,8 +1,8 @@
-import { BaseScanner } from './base-scanner';
-import { MCPScanner } from './mcp-scanner';
-import { HookScanner } from './hook-scanner';
-import { SkillScanner } from './skill-scanner';
-import { ConfigScanner } from './config-scanner';
+import { BaseScanner } from './base-scanner.js';
+import { MCPScanner } from './mcp-scanner.js';
+import { HookScanner } from './hook-scanner.js';
+import { SkillScanner } from './skill-scanner.js';
+import { ConfigScanner } from './config-scanner.js';
 
 /**
  * Scanner Factory - selects the appropriate scanner based on component type and file path
@@ -16,6 +16,13 @@ import { ConfigScanner } from './config-scanner';
  */
 
 export type ComponentType = 'mcpServer' | 'hook' | 'skill' | 'config' | 'unknown';
+
+/**
+ * Scanner cache for reusing stateless scanner instances.
+ * Since scanners are stateless, we can cache and reuse them to avoid
+ * unnecessary object creation overhead.
+ */
+const scannerCache: Partial<Record<ComponentType, BaseScanner>> = {};
 
 /**
  * Selects the appropriate scanner based on component type and file path
@@ -49,47 +56,50 @@ export function selectScanner(componentType: ComponentType, filePath: string): B
   // Normalize file path for consistent matching
   const normalizedPath = filePath.toLowerCase();
 
-  // Priority 1: Explicit component type
-  if (componentType === 'mcpServer') {
-    return new MCPScanner();
-  }
-
-  if (componentType === 'hook') {
-    return new HookScanner();
-  }
-
-  if (componentType === 'skill') {
-    return new SkillScanner();
-  }
-
-  if (componentType === 'config') {
-    return new ConfigScanner();
-  }
+  // Determine the effective component type (explicit or inferred from path)
+  let effectiveType: ComponentType = componentType;
 
   // Priority 2: Path-based detection (when componentType is 'unknown')
-
-  // Check for MCP-related files
-  if (normalizedPath.includes('mcp')) {
-    return new MCPScanner();
+  if (componentType === 'unknown') {
+    if (normalizedPath.includes('mcp')) {
+      effectiveType = 'mcpServer';
+    } else if (normalizedPath.includes('hooks/') || normalizedPath.includes('hooks\\')) {
+      effectiveType = 'hook';
+    } else if (normalizedPath.includes('skills/') || normalizedPath.includes('skills\\')) {
+      effectiveType = 'skill';
+    } else if (normalizedPath.endsWith('.json') || normalizedPath.includes('config')) {
+      effectiveType = 'config';
+    }
   }
 
-  // Check for hook files (hooks directory or hook-related files)
-  if (normalizedPath.includes('hooks/') || normalizedPath.includes('hooks\\')) {
-    return new HookScanner();
+  // Return cached scanner if available
+  const cachedScanner = scannerCache[effectiveType];
+  if (cachedScanner) {
+    return cachedScanner;
   }
 
-  // Check for skill files (skills directory or skill-related files)
-  if (normalizedPath.includes('skills/') || normalizedPath.includes('skills\\')) {
-    return new SkillScanner();
+  // Create and cache the scanner
+  let scanner: BaseScanner;
+
+  switch (effectiveType) {
+    case 'mcpServer':
+      scanner = new MCPScanner();
+      break;
+    case 'hook':
+      scanner = new HookScanner();
+      break;
+    case 'skill':
+      scanner = new SkillScanner();
+      break;
+    case 'config':
+      scanner = new ConfigScanner();
+      break;
+    default:
+      scanner = new BaseScanner();
   }
 
-  // Check for JSON configuration files (including config directory)
-  if (normalizedPath.endsWith('.json') || normalizedPath.includes('config')) {
-    return new ConfigScanner();
-  }
-
-  // Priority 3: Fallback to base scanner for unknown types
-  return new BaseScanner();
+  scannerCache[effectiveType] = scanner;
+  return scanner;
 }
 
 /**

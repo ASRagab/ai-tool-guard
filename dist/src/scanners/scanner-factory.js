@@ -1,12 +1,14 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.selectScanner = selectScanner;
-exports.createScannerForFile = createScannerForFile;
-const base_scanner_1 = require("./base-scanner");
-const mcp_scanner_1 = require("./mcp-scanner");
-const hook_scanner_1 = require("./hook-scanner");
-const skill_scanner_1 = require("./skill-scanner");
-const config_scanner_1 = require("./config-scanner");
+import { BaseScanner } from './base-scanner.js';
+import { MCPScanner } from './mcp-scanner.js';
+import { HookScanner } from './hook-scanner.js';
+import { SkillScanner } from './skill-scanner.js';
+import { ConfigScanner } from './config-scanner.js';
+/**
+ * Scanner cache for reusing stateless scanner instances.
+ * Since scanners are stateless, we can cache and reuse them to avoid
+ * unnecessary object creation overhead.
+ */
+const scannerCache = {};
 /**
  * Selects the appropriate scanner based on component type and file path
  *
@@ -35,41 +37,51 @@ const config_scanner_1 = require("./config-scanner");
  * const baseScanner = selectScanner('unknown', '/src/index.ts');
  * ```
  */
-function selectScanner(componentType, filePath) {
+export function selectScanner(componentType, filePath) {
     // Normalize file path for consistent matching
     const normalizedPath = filePath.toLowerCase();
-    // Priority 1: Explicit component type
-    if (componentType === 'mcpServer') {
-        return new mcp_scanner_1.MCPScanner();
-    }
-    if (componentType === 'hook') {
-        return new hook_scanner_1.HookScanner();
-    }
-    if (componentType === 'skill') {
-        return new skill_scanner_1.SkillScanner();
-    }
-    if (componentType === 'config') {
-        return new config_scanner_1.ConfigScanner();
-    }
+    // Determine the effective component type (explicit or inferred from path)
+    let effectiveType = componentType;
     // Priority 2: Path-based detection (when componentType is 'unknown')
-    // Check for MCP-related files
-    if (normalizedPath.includes('mcp')) {
-        return new mcp_scanner_1.MCPScanner();
+    if (componentType === 'unknown') {
+        if (normalizedPath.includes('mcp')) {
+            effectiveType = 'mcpServer';
+        }
+        else if (normalizedPath.includes('hooks/') || normalizedPath.includes('hooks\\')) {
+            effectiveType = 'hook';
+        }
+        else if (normalizedPath.includes('skills/') || normalizedPath.includes('skills\\')) {
+            effectiveType = 'skill';
+        }
+        else if (normalizedPath.endsWith('.json') || normalizedPath.includes('config')) {
+            effectiveType = 'config';
+        }
     }
-    // Check for hook files (hooks directory or hook-related files)
-    if (normalizedPath.includes('hooks/') || normalizedPath.includes('hooks\\')) {
-        return new hook_scanner_1.HookScanner();
+    // Return cached scanner if available
+    const cachedScanner = scannerCache[effectiveType];
+    if (cachedScanner) {
+        return cachedScanner;
     }
-    // Check for skill files (skills directory or skill-related files)
-    if (normalizedPath.includes('skills/') || normalizedPath.includes('skills\\')) {
-        return new skill_scanner_1.SkillScanner();
+    // Create and cache the scanner
+    let scanner;
+    switch (effectiveType) {
+        case 'mcpServer':
+            scanner = new MCPScanner();
+            break;
+        case 'hook':
+            scanner = new HookScanner();
+            break;
+        case 'skill':
+            scanner = new SkillScanner();
+            break;
+        case 'config':
+            scanner = new ConfigScanner();
+            break;
+        default:
+            scanner = new BaseScanner();
     }
-    // Check for JSON configuration files (including config directory)
-    if (normalizedPath.endsWith('.json') || normalizedPath.includes('config')) {
-        return new config_scanner_1.ConfigScanner();
-    }
-    // Priority 3: Fallback to base scanner for unknown types
-    return new base_scanner_1.BaseScanner();
+    scannerCache[effectiveType] = scanner;
+    return scanner;
 }
 /**
  * Creates a scanner instance based on file extension and path patterns
@@ -78,6 +90,6 @@ function selectScanner(componentType, filePath) {
  * @param filePath - The path to the file being scanned
  * @returns The appropriate scanner instance
  */
-function createScannerForFile(filePath) {
+export function createScannerForFile(filePath) {
     return selectScanner('unknown', filePath);
 }

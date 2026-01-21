@@ -1,43 +1,6 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.walkDirectory = walkDirectory;
-exports.walkDirectoryWithErrors = walkDirectoryWithErrors;
-const fdir_1 = require("fdir");
-const fs = __importStar(require("fs"));
-const path_utils_1 = require("./utils/path-utils");
+import { fdir } from 'fdir';
+import * as fs from 'fs';
+import { expandTilde, resolvePath } from './utils/path-utils.js';
 /**
  * High-performance directory walker using 'fdir' with error handling and safety features.
  *
@@ -45,7 +8,7 @@ const path_utils_1 = require("./utils/path-utils");
  * @param extensions List of file extensions to include (e.g., ['.ts', '.py']) or ['*'] for all
  * @returns Promise resolving to an array of absolute file paths
  */
-async function walkDirectory(dir, extensions) {
+export async function walkDirectory(dir, extensions) {
     const result = await walkDirectoryWithErrors(dir, extensions);
     // Log warnings for errors but return files
     result.errors.forEach(error => {
@@ -69,14 +32,14 @@ async function walkDirectory(dir, extensions) {
  * @param extensions List of file extensions to include (e.g., ['.ts', '.py']) or ['*'] for all
  * @returns Promise resolving to WalkResult with files and errors
  */
-async function walkDirectoryWithErrors(dir, extensions) {
+export async function walkDirectoryWithErrors(dir, extensions) {
     const errors = [];
     const visitedPaths = new Set();
     // Expand tilde and resolve symlinks in the directory path
-    const expandedDir = (0, path_utils_1.expandTilde)(dir);
+    const expandedDir = expandTilde(dir);
     let resolvedDir;
     try {
-        resolvedDir = await (0, path_utils_1.resolvePath)(expandedDir);
+        resolvedDir = await resolvePath(expandedDir);
     }
     catch (error) {
         errors.push({
@@ -106,7 +69,7 @@ async function walkDirectoryWithErrors(dir, extensions) {
     const extList = extensions
         .map(e => e.replace(/^\./, '')) // remove leading dot
         .filter(e => e !== '*');
-    let crawler = new fdir_1.fdir()
+    let crawler = new fdir()
         .withFullPaths()
         .withMaxDepth(10) // Safety: Prevent infinite recursion/deep loops
         .exclude((dirName, dirPath) => {

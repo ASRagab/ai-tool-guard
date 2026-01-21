@@ -1,69 +1,29 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.MCPScanner = void 0;
-const fs = __importStar(require("fs"));
-const base_scanner_1 = require("./base-scanner");
-/**
- * MCP Server Scanner - specialized scanner for Model Context Protocol (MCP) servers
- * Detects network exfiltration, command injection, and unsafe configurations
- */
-// MCP-specific security patterns
+import * as fs from 'fs';
+import { BaseScanner } from './base-scanner.js';
 const MCP_PATTERNS = [
     {
         id: 'MCP_HTTP_EXFIL',
+        category: 'EXFILTRATION',
+        severity: 'critical',
         pattern: /(?:url|endpoint|host)["']\s*:\s*["']https?:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/i,
-        description: 'MCP server configured with hardcoded IP address (potential exfiltration)'
+        description: 'MCP server connects to hardcoded IP'
     },
     {
         id: 'MCP_COMMAND_INJECTION',
+        category: 'EXFILTRATION',
+        severity: 'critical',
         pattern: /(?:command|args)["']\s*:\s*["'][^"']*(?:\$\{|`|\||;|&&)/,
-        description: 'MCP stdio command contains potential command injection vectors'
-    },
-    {
-        id: 'MCP_UNTRUSTED_URL',
-        pattern: /(?:url|endpoint)["']\s*:\s*["']https?:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0)[^"']+/i,
-        description: 'MCP server URL points to non-localhost endpoint (security risk)'
+        description: 'MCP command contains injection vectors'
     },
     {
         id: 'MCP_ENV_DANGER',
+        category: 'SENSITIVE_ACCESS',
+        severity: 'high',
         pattern: /(?:env|environment)["']\s*:\s*\{[^}]*(?:AWS_SECRET|ANTHROPIC_API_KEY|OPENAI_API_KEY|API_SECRET|PRIVATE_KEY)[^}]*\}/i,
-        description: 'MCP server environment configuration may expose sensitive credentials'
+        description: 'MCP exposes sensitive credentials in env'
     }
 ];
-class MCPScanner extends base_scanner_1.BaseScanner {
+export class MCPScanner extends BaseScanner {
     constructor() {
         super();
         // Add MCP-specific patterns to the base patterns
@@ -116,39 +76,47 @@ class MCPScanner extends base_scanner_1.BaseScanner {
         const baseResult = this.scanFile(filePath, content);
         // Then extract and validate MCP servers for deeper analysis
         const servers = await this.extractMCPServers(filePath);
-        // Add context-aware validation
         for (const server of servers) {
-            // Check for command injection in stdio servers
             if (server.type === 'stdio' && server.args) {
                 for (const arg of server.args) {
                     if (/\$\{|`|\||;|&&/.test(arg)) {
                         baseResult.matches.push({
                             id: 'MCP_COMMAND_INJECTION',
-                            description: `MCP server "${server.name}" has potentially unsafe command argument: ${arg}`,
-                            line: 0, // Line number not available from JSON parsing
-                            match: `args: [${server.args.join(', ')}]`
+                            category: 'EXFILTRATION',
+                            severity: 'critical',
+                            description: `MCP server "${server.name}" has unsafe command argument`,
+                            line: 0,
+                            match: `args: [${server.args.join(', ')}]`,
+                            contextBefore: [],
+                            contextAfter: []
                         });
                     }
                 }
             }
-            // Check for HTTP servers pointing to external IPs
             if (server.url && /https?:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(server.url)) {
                 baseResult.matches.push({
                     id: 'MCP_HTTP_EXFIL',
-                    description: `MCP server "${server.name}" connects to hardcoded IP: ${server.url}`,
+                    category: 'EXFILTRATION',
+                    severity: 'critical',
+                    description: `MCP server "${server.name}" connects to hardcoded IP`,
                     line: 0,
-                    match: `url: ${server.url}`
+                    match: `url: ${server.url}`,
+                    contextBefore: [],
+                    contextAfter: []
                 });
             }
-            // Check for sensitive environment variables
             if (server.env) {
                 const sensitiveKeys = Object.keys(server.env).filter(key => /AWS_SECRET|ANTHROPIC_API_KEY|OPENAI_API_KEY|API_SECRET|PRIVATE_KEY/i.test(key));
                 if (sensitiveKeys.length > 0) {
                     baseResult.matches.push({
                         id: 'MCP_ENV_DANGER',
-                        description: `MCP server "${server.name}" exposes sensitive environment variables: ${sensitiveKeys.join(', ')}`,
+                        category: 'SENSITIVE_ACCESS',
+                        severity: 'high',
+                        description: `MCP server "${server.name}" exposes sensitive env vars`,
                         line: 0,
-                        match: `env: { ${sensitiveKeys.join(', ')} }`
+                        match: `env: { ${sensitiveKeys.join(', ')} }`,
+                        contextBefore: [],
+                        contextAfter: []
                     });
                 }
             }
@@ -156,4 +124,3 @@ class MCPScanner extends base_scanner_1.BaseScanner {
         return baseResult;
     }
 }
-exports.MCPScanner = MCPScanner;

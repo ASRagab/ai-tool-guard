@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Security scanner for AI tools and extensions",
   "main": "dist/src/index.js",
+  "type": "module",
   "bin": {
     "ai-tool-guard": "./dist/src/index.js"
   },
@@ -27,6 +28,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@nodesecure/js-x-ray": "^11.3.0",
+    "chalk": "^5.6.2",
     "commander": "^14.0.2",
     "fdir": "^6.5.0",
     "isbinaryfile": "^6.0.0"

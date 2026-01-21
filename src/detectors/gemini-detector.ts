@@ -6,8 +6,9 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { AIToolDetector, ComponentInfo, DetectionResult } from './base-detector';
-import { expandTilde } from '../utils/path-utils';
+import { AIToolDetector, ComponentInfo, DetectionResult } from './base-detector.js';
+import { expandTilde } from '../utils/path-utils.js';
+import { readExtensionMetadata } from '../utils/detector-utils.js';
 
 /**
  * Detector for Google Gemini Code Assist extensions in VS Code and Cursor.
@@ -184,7 +185,7 @@ export class GeminiDetector implements AIToolDetector {
         const [, extensionName, version] = match;
 
         // Try to read package.json for additional metadata
-        const metadata = await this.readExtensionMetadata(fullPath);
+        const metadata = await readExtensionMetadata(fullPath);
 
         // Store version in the name if available, or keep original extension name
         const displayName = metadata?.version
@@ -205,30 +206,7 @@ export class GeminiDetector implements AIToolDetector {
     return components;
   }
 
-  /**
-   * Reads extension metadata from package.json file.
-   *
-   * @private
-   * @param {string} extensionPath - Path to the extension directory
-   * @returns {Promise<Record<string, any> | null>} Extension metadata or null if not found
-   */
-  private async readExtensionMetadata(extensionPath: string): Promise<Record<string, any> | null> {
-    try {
-      const packageJsonPath = path.join(extensionPath, 'package.json');
-      const content = await fs.readFile(packageJsonPath, 'utf-8');
-      const packageJson = JSON.parse(content);
-
-      return {
-        version: packageJson.version,
-        displayName: packageJson.displayName,
-        description: packageJson.description,
-        publisher: packageJson.publisher
-      };
-    } catch (error) {
-      // package.json doesn't exist or invalid JSON
-      return null;
-    }
-  }
+  // readExtensionMetadata is now imported from utils/detector-utils.ts
 
   /**
    * Parses VS Code settings.json to extract Gemini configuration.

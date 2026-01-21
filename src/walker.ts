@@ -1,7 +1,6 @@
 import { fdir } from 'fdir';
-import * as path from 'path';
 import * as fs from 'fs';
-import { expandTilde, resolvePath } from './utils/path-utils';
+import { expandTilde, resolvePath } from './utils/path-utils.js';
 
 /**
  * Errors encountered during directory walking

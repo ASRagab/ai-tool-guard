@@ -1,47 +1,12 @@
-"use strict";
 /**
  * Claude Code Detector - detects Claude Code installation and components
  * Scans for plugins, skills, hooks, and MCP servers in Claude Code directories
  * @module detectors/claude-code-detector
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ClaudeCodeDetector = void 0;
-const fs_1 = require("fs");
-const path = __importStar(require("path"));
-const path_utils_1 = require("../utils/path-utils");
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import { expandTilde, parsePATH, resolvePath, isSymlink } from '../utils/path-utils.js';
+import { detectDirectory } from '../utils/detector-utils.js';
 /**
  * Detector for Claude Code CLI and its components.
  * Searches for:
@@ -68,7 +33,7 @@ const path_utils_1 = require("../utils/path-utils");
  * }
  * ```
  */
-class ClaudeCodeDetector {
+export class ClaudeCodeDetector {
     constructor() {
         this.name = 'claude-code-detector';
     }
@@ -89,8 +54,8 @@ class ClaudeCodeDetector {
      */
     getPaths() {
         return [
-            (0, path_utils_1.expandTilde)('~/.claude/'),
-            (0, path_utils_1.expandTilde)('~/.config/claude/')
+            expandTilde('~/.claude/'),
+            expandTilde('~/.config/claude/')
         ];
     }
     /**
@@ -108,13 +73,13 @@ class ClaudeCodeDetector {
      */
     async checkPATH() {
         const components = [];
-        const pathDirs = (0, path_utils_1.parsePATH)();
+        const pathDirs = parsePATH();
         for (const dir of pathDirs) {
             try {
                 const claudePath = path.join(dir, 'claude');
                 // Check if the executable exists
                 try {
-                    await fs_1.promises.access(claudePath, fs_1.promises.constants.X_OK);
+                    await fs.access(claudePath, fs.constants.X_OK);
                 }
                 catch {
                     // Not executable or doesn't exist, skip
@@ -122,9 +87,9 @@ class ClaudeCodeDetector {
                 }
                 // Resolve symlinks to get the real path
                 let resolvedPath = claudePath;
-                if (await (0, path_utils_1.isSymlink)(claudePath)) {
+                if (await isSymlink(claudePath)) {
                     try {
-                        resolvedPath = await (0, path_utils_1.resolvePath)(claudePath);
+                        resolvedPath = await resolvePath(claudePath);
                     }
                     catch {
                         // If symlink resolution fails, use the original path
@@ -177,25 +142,25 @@ class ClaudeCodeDetector {
             components[`executable:${comp.name}`] = comp;
         });
         // Detect plugins in ~/.claude/plugins/
-        const pluginsPath = (0, path_utils_1.expandTilde)('~/.claude/plugins/');
-        const plugins = await this.detectDirectory(pluginsPath, 'plugin');
+        const pluginsPath = expandTilde('~/.claude/plugins/');
+        const plugins = await detectDirectory(pluginsPath, 'plugin');
         plugins.forEach(comp => {
             components[`plugin:${comp.name}`] = comp;
         });
         // Detect skills in ~/.claude/skills/
-        const skillsPath = (0, path_utils_1.expandTilde)('~/.claude/skills/');
-        const skills = await this.detectDirectory(skillsPath, 'skill');
+        const skillsPath = expandTilde('~/.claude/skills/');
+        const skills = await detectDirectory(skillsPath, 'skill');
         skills.forEach(comp => {
             components[`skill:${comp.name}`] = comp;
         });
         // Detect hooks in ~/.claude/hooks/
-        const hooksPath = (0, path_utils_1.expandTilde)('~/.claude/hooks/');
-        const hooks = await this.detectDirectory(hooksPath, 'hook');
+        const hooksPath = expandTilde('~/.claude/hooks/');
+        const hooks = await detectDirectory(hooksPath, 'hook');
         hooks.forEach(comp => {
             components[`hook:${comp.name}`] = comp;
         });
         // Parse ~/.claude/mcp.json to extract MCP servers
-        const mcpConfigPath = (0, path_utils_1.expandTilde)('~/.claude/mcp.json');
+        const mcpConfigPath = expandTilde('~/.claude/mcp.json');
         const mcpServers = await this.detectMCPServers(mcpConfigPath);
         mcpServers.forEach(comp => {
             components[`mcp-server:${comp.name}`] = comp;
@@ -207,38 +172,7 @@ class ClaudeCodeDetector {
             scanPaths
         };
     }
-    /**
-     * Detects components in a directory by reading all entries.
-     * Categorizes entries by the specified type.
-     *
-     * @private
-     * @param {string} dirPath - Directory path to scan
-     * @param {string} componentType - Type classification for detected components
-     * @returns {Promise<ComponentInfo[]>} Array of detected components
-     */
-    async detectDirectory(dirPath, componentType) {
-        const components = [];
-        try {
-            const entries = await fs_1.promises.readdir(dirPath, { withFileTypes: true });
-            for (const entry of entries) {
-                const fullPath = path.join(dirPath, entry.name);
-                // Skip hidden files/directories (starting with .)
-                if (entry.name.startsWith('.')) {
-                    continue;
-                }
-                components.push({
-                    name: entry.name,
-                    path: fullPath,
-                    type: componentType
-                });
-            }
-        }
-        catch (error) {
-            // Directory doesn't exist or isn't accessible - return empty array
-            return [];
-        }
-        return components;
-    }
+    // detectDirectory is now imported from utils/detector-utils.ts
     /**
      * Parses ~/.claude/mcp.json to extract MCP server definitions.
      * Reads the mcpServers object and creates ComponentInfo entries for each server.
@@ -274,7 +208,7 @@ class ClaudeCodeDetector {
     async detectMCPServers(configPath) {
         const components = [];
         try {
-            const content = await fs_1.promises.readFile(configPath, 'utf-8');
+            const content = await fs.readFile(configPath, 'utf-8');
             const config = JSON.parse(content);
             // MCP config format: { "mcpServers": { "server-name": { ... } } }
             if (config.mcpServers && typeof config.mcpServers === 'object') {
@@ -294,4 +228,3 @@ class ClaudeCodeDetector {
         return components;
     }
 }
-exports.ClaudeCodeDetector = ClaudeCodeDetector;

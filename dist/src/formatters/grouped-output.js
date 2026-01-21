@@ -1,61 +1,5 @@
-"use strict";
-/**
- * Grouped output formatter for AI tool scan results.
- * Groups results by ecosystem with color coding and summary statistics.
- * @module formatters/grouped-output
- */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.formatGroupedOutput = formatGroupedOutput;
-exports.formatGroupedOutputNoColor = formatGroupedOutputNoColor;
-const path = __importStar(require("path"));
-/**
- * ANSI color codes for terminal output
- */
-const COLORS = {
-    reset: '\x1b[0m',
-    green: '\x1b[32m',
-    yellow: '\x1b[33m',
-    red: '\x1b[31m',
-    cyan: '\x1b[36m',
-    bold: '\x1b[1m',
-    dim: '\x1b[2m',
-};
-/**
- * Emoji icons for different ecosystems and severity levels
- */
+import * as path from 'path';
+import chalk from 'chalk';
 const ICONS = {
     python: '🐍',
     javascript: '📜',
@@ -69,9 +13,6 @@ const ICONS = {
     file: '📄',
     issue: '🔍',
 };
-/**
- * Determines the ecosystem based on file extension
- */
 function getEcosystem(filePath) {
     const ext = path.extname(filePath).toLowerCase();
     const ecosystemMap = {
@@ -84,9 +25,6 @@ function getEcosystem(filePath) {
     };
     return ecosystemMap[ext] || 'Other';
 }
-/**
- * Gets emoji icon for ecosystem
- */
 function getEcosystemIcon(ecosystem) {
     const iconMap = {
         'Python': ICONS.python,
@@ -98,34 +36,22 @@ function getEcosystemIcon(ecosystem) {
     };
     return iconMap[ecosystem] || '📦';
 }
-/**
- * Determines severity based on issue type
- */
-function getSeverity(issueId) {
-    const criticalPatterns = ['CURL_BASH', 'PY_EXEC', 'JS_EXEC', 'HARDCODED_IP'];
-    const warningPatterns = ['PY_NETWORK', 'JS_NETWORK', 'PY_FILE_ACCESS', 'JS_FILE_ACCESS'];
-    if (criticalPatterns.includes(issueId))
+function mapSeverityToDisplay(severity) {
+    if (severity === 'critical')
         return 'critical';
-    if (warningPatterns.includes(issueId))
+    if (severity === 'high' || severity === 'medium')
         return 'warning';
-    return 'warning'; // Default to warning for unknown patterns
+    return 'clean';
 }
-/**
- * Gets color based on severity
- */
-function getSeverityColor(severity) {
+function getSeverityChalk(severity) {
     switch (severity) {
-        case 'clean': return COLORS.green;
-        case 'warning': return COLORS.yellow;
-        case 'critical': return COLORS.red;
+        case 'clean': return chalk.green;
+        case 'warning': return chalk.yellow;
+        case 'critical': return chalk.red;
     }
 }
-/**
- * Groups scan results by ecosystem
- */
 function groupByEcosystem(results) {
     const groups = new Map();
-    // Group results by ecosystem
     results.forEach(result => {
         const ecosystem = getEcosystem(result.filePath);
         if (!groups.has(ecosystem)) {
@@ -133,110 +59,101 @@ function groupByEcosystem(results) {
         }
         groups.get(ecosystem).push(result);
     });
-    // Convert to array and calculate statistics
     return Array.from(groups.entries()).map(([ecosystem, results]) => ({
         ecosystem,
         fileCount: results.length,
         issueCount: results.reduce((sum, r) => sum + r.matches.length, 0),
         results,
-    })).sort((a, b) => b.issueCount - a.issueCount); // Sort by issue count descending
+    })).sort((a, b) => b.issueCount - a.issueCount);
 }
-/**
- * Prints a separator line
- */
 function printSeparator(char = '─', length = 80) {
-    console.log(COLORS.dim + char.repeat(length) + COLORS.reset);
+    console.log(chalk.dim(char.repeat(length)));
 }
-/**
- * Prints ecosystem header with emoji and statistics
- */
 function printEcosystemHeader(group) {
     const icon = getEcosystemIcon(group.ecosystem);
     const severityIcon = group.issueCount > 10 ? ICONS.critical :
         group.issueCount > 0 ? ICONS.warning : ICONS.clean;
     console.log();
     printSeparator('═');
-    console.log(`${COLORS.bold}${COLORS.cyan}${icon}  ${group.ecosystem} Ecosystem${COLORS.reset} ${severityIcon}`);
+    console.log(chalk.bold.cyan(`${icon}  ${group.ecosystem} Ecosystem`) + ` ${severityIcon}`);
     printSeparator('═');
-    console.log(`${COLORS.bold}Files Scanned:${COLORS.reset} ${group.fileCount}  |  ` +
-        `${COLORS.bold}Total Issues:${COLORS.reset} ${group.issueCount}`);
+    console.log(`${chalk.bold('Files Scanned:')} ${group.fileCount}  |  ` +
+        `${chalk.bold('Total Issues:')} ${group.issueCount}`);
     printSeparator();
 }
-/**
- * Truncates text to specified length with ellipsis
- */
 function truncate(text, maxLength = 100) {
     if (text.length <= maxLength)
         return text;
     return text.substring(0, maxLength - 3) + '...';
 }
-/**
- * Prints file results with color-coded severity
- */
 function printFileResults(result, baseDir) {
-    const relativePath = path.relative(baseDir, result.filePath);
-    console.log(`\n${ICONS.file} ${COLORS.bold}${relativePath}${COLORS.reset}`);
-    result.matches.forEach(match => {
-        const severity = getSeverity(match.id);
-        const color = getSeverityColor(severity);
-        const icon = severity === 'critical' ? ICONS.critical : ICONS.warning;
-        console.log(`  ${icon} ${color}[${match.id}]${COLORS.reset} Line ${match.line}: ${match.description}`);
-        console.log(`     ${COLORS.dim}${truncate(match.match, 100)}${COLORS.reset}`);
+    const fullPath = path.resolve(result.filePath);
+    console.log(`\n${ICONS.file} ${chalk.bold(fullPath)}`);
+    const criticalMatches = result.matches.filter(match => match.severity === 'critical' || match.severity === 'high');
+    const nonCriticalMatches = result.matches.filter(match => match.severity === 'medium' || match.severity === 'low');
+    if (nonCriticalMatches.length > 0) {
+        console.log(chalk.yellow(`  ${ICONS.warning} ${nonCriticalMatches.length} warning${nonCriticalMatches.length > 1 ? 's' : ''} (medium/low, grouped)`));
+    }
+    criticalMatches.forEach(match => {
+        const displaySeverity = mapSeverityToDisplay(match.severity);
+        const colorFn = getSeverityChalk(displaySeverity);
+        const icon = displaySeverity === 'critical' ? ICONS.critical : ICONS.warning;
+        console.log(`  ${icon} ${colorFn(`[${match.category}]`)} Line ${match.line}: ${match.description}`);
+        if (match.contextBefore.length > 0) {
+            match.contextBefore.forEach((line, idx) => {
+                const lineNum = match.line - match.contextBefore.length + idx;
+                console.log(chalk.dim(`     ${lineNum} | ${line}`));
+            });
+        }
+        console.log(chalk.bold(`  →  ${match.line} | ${truncate(match.match, 100)}`));
+        if (match.contextAfter.length > 0) {
+            match.contextAfter.forEach((line, idx) => {
+                const lineNum = match.line + idx + 1;
+                console.log(chalk.dim(`     ${lineNum} | ${line}`));
+            });
+        }
+        console.log();
     });
 }
-/**
- * Prints final summary across all ecosystems
- */
 function printSummary(groups) {
     const totalFiles = groups.reduce((sum, g) => sum + g.fileCount, 0);
     const totalIssues = groups.reduce((sum, g) => sum + g.issueCount, 0);
-    const criticalCount = groups.reduce((sum, g) => sum + g.results.reduce((s, r) => s + r.matches.filter(m => getSeverity(m.id) === 'critical').length, 0), 0);
+    const criticalCount = groups.reduce((sum, g) => sum + g.results.reduce((s, r) => s + r.matches.filter(m => m.severity === 'critical').length, 0), 0);
     const warningCount = totalIssues - criticalCount;
     console.log();
     printSeparator('═');
-    console.log(`${COLORS.bold}${COLORS.cyan}📊 SCAN SUMMARY${COLORS.reset}`);
+    console.log(chalk.bold.cyan('📊 SCAN SUMMARY'));
     printSeparator('═');
-    console.log(`${COLORS.bold}Total Ecosystems:${COLORS.reset} ${groups.length}`);
-    console.log(`${COLORS.bold}Total Files:${COLORS.reset} ${totalFiles}`);
-    console.log(`${COLORS.bold}Total Issues:${COLORS.reset} ${totalIssues}`);
-    console.log(`  ${COLORS.red}${ICONS.critical} Critical:${COLORS.reset} ${criticalCount}  |  ` +
-        `${COLORS.yellow}${ICONS.warning} Warnings:${COLORS.reset} ${warningCount}`);
+    console.log(`${chalk.bold('Total Ecosystems:')} ${groups.length}`);
+    console.log(`${chalk.bold('Total Files:')} ${totalFiles}`);
+    console.log(`${chalk.bold('Total Issues:')} ${totalIssues}`);
+    console.log(`  ${chalk.red(`${ICONS.critical} Critical:`)} ${criticalCount}  |  ` +
+        `${chalk.yellow(`${ICONS.warning} Warnings:`)} ${warningCount}`);
     printSeparator('═');
     if (criticalCount > 0) {
-        console.log(`\n${COLORS.red}${COLORS.bold}${ICONS.critical} CRITICAL ISSUES DETECTED!${COLORS.reset}`);
+        console.log(`\n${chalk.red.bold(`${ICONS.critical} CRITICAL ISSUES DETECTED!`)}`);
     }
     else if (warningCount > 0) {
-        console.log(`\n${COLORS.yellow}${ICONS.warning} Review warnings to ensure security.${COLORS.reset}`);
+        console.log(`\n${chalk.yellow(`${ICONS.warning} Review warnings to ensure security.`)}`);
     }
     else {
-        console.log(`\n${COLORS.green}${ICONS.clean} No issues detected. Clean scan!${COLORS.reset}`);
+        console.log(`\n${chalk.green(`${ICONS.clean} No issues detected. Clean scan!`)}`);
     }
 }
-/**
- * Formats and displays scan results grouped by ecosystem
- *
- * @param results - Array of scan results to format
- * @param baseDir - Base directory for calculating relative paths (defaults to current working directory)
- */
-function formatGroupedOutput(results, baseDir = process.cwd()) {
+export function formatGroupedOutput(results, baseDir = process.cwd()) {
     if (results.length === 0) {
-        console.log(`${COLORS.green}${ICONS.clean} No suspicious patterns found. Clean scan!${COLORS.reset}`);
+        console.log(chalk.green(`${ICONS.clean} No suspicious patterns found. Clean scan!`));
         return;
     }
     const groups = groupByEcosystem(results);
-    console.log(`\n${COLORS.bold}${COLORS.cyan}🛡️  AI Tool Guard - Grouped Scan Results${COLORS.reset}`);
-    // Print each ecosystem group
+    console.log(`\n${chalk.bold.cyan('🛡️  AI Tool Guard - Grouped Scan Results')}`);
     groups.forEach(group => {
         printEcosystemHeader(group);
         group.results.forEach(result => printFileResults(result, baseDir));
     });
-    // Print final summary
     printSummary(groups);
 }
-/**
- * Formats grouped output with no color (for CI/CD environments)
- */
-function formatGroupedOutputNoColor(results, baseDir = process.cwd()) {
+export function formatGroupedOutputNoColor(results, baseDir = process.cwd()) {
     if (results.length === 0) {
         console.log('No suspicious patterns found. Clean scan!');
         return;
@@ -249,11 +166,29 @@ function formatGroupedOutputNoColor(results, baseDir = process.cwd()) {
         console.log(`Files: ${group.fileCount} | Issues: ${group.issueCount}`);
         console.log('-----------------------------------');
         group.results.forEach(result => {
-            const relativePath = path.relative(baseDir, result.filePath);
-            console.log(`\nFile: ${relativePath}`);
-            result.matches.forEach(match => {
+            const fullPath = path.resolve(result.filePath);
+            console.log(`\nFile: ${fullPath}`);
+            const criticalMatches = result.matches.filter(match => match.severity === 'critical' || match.severity === 'high');
+            const nonCriticalMatches = result.matches.filter(match => match.severity === 'medium' || match.severity === 'low');
+            if (nonCriticalMatches.length > 0) {
+                console.log(`  Warnings (grouped): ${nonCriticalMatches.length}`);
+            }
+            criticalMatches.forEach(match => {
                 console.log(`  [${match.id}] Line ${match.line}: ${match.description}`);
                 console.log(`  Code: ${truncate(match.match, 100)}`);
+                if (match.contextBefore.length > 0) {
+                    match.contextBefore.forEach((line, idx) => {
+                        const lineNum = match.line - match.contextBefore.length + idx;
+                        console.log(`    ${lineNum} | ${line}`);
+                    });
+                }
+                console.log(`  → ${match.line} | ${match.match}`);
+                if (match.contextAfter.length > 0) {
+                    match.contextAfter.forEach((line, idx) => {
+                        const lineNum = match.line + idx + 1;
+                        console.log(`    ${lineNum} | ${line}`);
+                    });
+                }
             });
         });
     });

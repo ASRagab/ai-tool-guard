@@ -8,7 +8,15 @@
       "Bash(claude mcp:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Skill(ralph-tui-create-json)"
+      "Skill(ralph-tui-create-json)",
+      "Skill(systematic-debugging)",
+      "Bash(ls:*)",
+      "Bash(node:*)",
+      "Bash(DEBUG=1 node dist/src/index.js:*)",
+      "Bash(npm unlink:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm link)",
+      "Bash(ai-tool-guard:*)"
     ]
   }
 }

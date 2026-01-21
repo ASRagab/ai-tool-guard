@@ -6,7 +6,8 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { AIToolDetector } from './base-detector';
+import { AIToolDetector } from './base-detector.js';
+import { isValidDetector, getMissingDetectorProperties } from '../utils/detector-utils.js';
 
 /**
  * Dynamically imports and validates all detector modules from the detectors directory.
@@ -16,7 +17,7 @@ import { AIToolDetector } from './base-detector';
  *
  * @example
  * ```typescript
- * import { getAllDetectors } from './detectors/detector-registry';
+ * import { getAllDetectors } from './detectors/detector-registry.js';
  *
  * const detectors = await getAllDetectors();
  * console.log(`Loaded ${detectors.length} detectors`);
@@ -51,8 +52,23 @@ export async function getAllDetectors(): Promise<AIToolDetector[]> {
         const module = await import(modulePath);
 
         // Look for exported detector class or instance
-        // Common patterns: default export, named export, or first exported item
-        const DetectorClass = module.default || module[Object.keys(module)[0]];
+        // Common patterns: default export, named export matching *Detector pattern
+        let DetectorClass = module.default;
+
+        // If no default export, look for a named export that looks like a detector class
+        if (!DetectorClass) {
+          for (const key of Object.keys(module)) {
+            // Skip non-constructor exports like __esModule
+            if (key.startsWith('_')) continue;
+
+            const exported = module[key];
+            // Check if it's a class (function with prototype) or an object instance
+            if (typeof exported === 'function' || (typeof exported === 'object' && exported !== null)) {
+              DetectorClass = exported;
+              break;
+            }
+          }
+        }
 
         if (!DetectorClass) {
           console.warn(`Warning: No detector export found in ${file}`);
@@ -70,7 +86,7 @@ export async function getAllDetectors(): Promise<AIToolDetector[]> {
         } else {
           console.warn(
             `Warning: Detector in ${file} does not implement AIToolDetector interface correctly. ` +
-            `Missing properties: ${getMissingProperties(detector)}`
+            `Missing properties: ${getMissingDetectorProperties(detector)}`
           );
         }
       } catch (error) {
@@ -88,51 +104,4 @@ export async function getAllDetectors(): Promise<AIToolDetector[]> {
   }
 }
 
-/**
- * Validates that an object implements the AIToolDetector interface.
- *
- * @private
- * @param {any} obj - Object to validate
- * @returns {boolean} True if the object is a valid detector
- */
-function isValidDetector(obj: any): obj is AIToolDetector {
-  return (
-    obj &&
-    typeof obj === 'object' &&
-    typeof obj.name === 'string' &&
-    obj.name.length > 0 &&
-    typeof obj.detect === 'function' &&
-    typeof obj.getPaths === 'function' &&
-    typeof obj.checkPATH === 'function'
-  );
-}
-
-/**
- * Returns a comma-separated list of missing required properties for debugging.
- *
- * @private
- * @param {any} obj - Object to check
- * @returns {string} List of missing properties
- */
-function getMissingProperties(obj: any): string {
-  const missing: string[] = [];
-
-  if (!obj || typeof obj !== 'object') {
-    return 'not an object';
-  }
-
-  if (typeof obj.name !== 'string' || obj.name.length === 0) {
-    missing.push('name (string)');
-  }
-  if (typeof obj.detect !== 'function') {
-    missing.push('detect (function)');
-  }
-  if (typeof obj.getPaths !== 'function') {
-    missing.push('getPaths (function)');
-  }
-  if (typeof obj.checkPATH !== 'function') {
-    missing.push('checkPATH (function)');
-  }
-
-  return missing.join(', ');
-}
+// isValidDetector and getMissingDetectorProperties are now imported from utils/detector-utils.ts

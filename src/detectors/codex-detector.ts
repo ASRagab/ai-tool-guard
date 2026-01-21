@@ -6,8 +6,8 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { AIToolDetector, ComponentInfo, DetectionResult } from './base-detector';
-import { expandTilde, parsePATH, resolvePath, isSymlink } from '../utils/path-utils';
+import { AIToolDetector, ComponentInfo, DetectionResult } from './base-detector.js';
+import { expandTilde, parsePATH, resolvePath, isSymlink } from '../utils/path-utils.js';
 
 /**
  * Detector for Codex CLI and its components.

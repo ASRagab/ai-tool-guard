@@ -1,52 +1,6 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.isWindows = isWindows;
-exports.expandTilde = expandTilde;
-exports.resolvePath = resolvePath;
-exports.resolvePathSync = resolvePathSync;
-exports.parsePATH = parsePATH;
-exports.safePath = safePath;
-exports.isSymlink = isSymlink;
-exports.getHomeDir = getHomeDir;
-exports.normalizePath = normalizePath;
-exports.getAppDataDir = getAppDataDir;
-exports.getLocalAppDataDir = getLocalAppDataDir;
-const path = __importStar(require("path"));
-const os = __importStar(require("os"));
-const fs = __importStar(require("fs"));
+import * as path from 'path';
+import * as os from 'os';
+import * as fs from 'fs';
 /**
  * Cross-platform path handling utilities for Windows, macOS, and Linux.
  * Provides robust path operations with tilde expansion and symlink resolution.
@@ -56,7 +10,7 @@ const fs = __importStar(require("fs"));
  *
  * @returns True if running on Windows, false otherwise
  */
-function isWindows() {
+export function isWindows() {
     return process.platform === 'win32';
 }
 /**
@@ -72,7 +26,7 @@ function isWindows() {
  * expandTilde('%USERPROFILE%\\.config') // Returns 'C:\\Users\\username\\.config' on Windows
  * expandTilde('/absolute')   // Returns '/absolute' (no change)
  */
-function expandTilde(filePath) {
+export function expandTilde(filePath) {
     const homeDir = os.homedir();
     // Handle Windows %USERPROFILE% environment variable
     if (isWindows() && filePath.includes('%USERPROFILE%')) {
@@ -97,7 +51,7 @@ function expandTilde(filePath) {
  * await resolvePath('~/link-to-dir')  // Resolves symlink and returns real path
  * await resolvePath('./relative')      // Resolves to absolute path
  */
-async function resolvePath(filePath) {
+export async function resolvePath(filePath) {
     const expanded = expandTilde(filePath);
     try {
         return await fs.promises.realpath(expanded);
@@ -113,7 +67,7 @@ async function resolvePath(filePath) {
  * @param filePath - Path to resolve (can include tilde)
  * @returns The real absolute path
  */
-function resolvePathSync(filePath) {
+export function resolvePathSync(filePath) {
     const expanded = expandTilde(filePath);
     try {
         return fs.realpathSync(expanded);
@@ -134,7 +88,7 @@ function resolvePathSync(filePath) {
  * parsePATH() // Returns ['/usr/local/bin', '/usr/bin', '/bin', '/Users/user/.local/bin'] on Unix
  * parsePATH() // Returns ['C:\\Windows\\System32', 'C:\\Program Files\\nodejs'] on Windows
  */
-function parsePATH() {
+export function parsePATH() {
     const pathEnv = process.env.PATH || '';
     const delimiter = isWindows() ? ';' : ':';
     return pathEnv
@@ -154,7 +108,7 @@ function parsePATH() {
  * safePath('~', '.config', 'app')      // Returns '/Users/username/.config/app'
  * safePath('/usr', 'local', 'bin')     // Returns '/usr/local/bin'
  */
-function safePath(...segments) {
+export function safePath(...segments) {
     if (segments.length === 0) {
         return '';
     }
@@ -168,7 +122,7 @@ function safePath(...segments) {
  * @param filePath - Path to check
  * @returns Promise resolving to true if path is a symlink
  */
-async function isSymlink(filePath) {
+export async function isSymlink(filePath) {
     try {
         const stats = await fs.promises.lstat(filePath);
         return stats.isSymbolicLink();
@@ -187,7 +141,7 @@ async function isSymlink(filePath) {
  * getHomeDir() // Returns '/Users/username' on macOS or '/home/username' on Linux
  * getHomeDir() // Returns 'C:\\Users\\username' on Windows
  */
-function getHomeDir() {
+export function getHomeDir() {
     return os.homedir();
 }
 /**
@@ -204,7 +158,7 @@ function getHomeDir() {
  * normalizePath('C:\\Users\\name') // Returns 'C:\\Users\\name' on Windows
  * normalizePath('C:\\Users\\name') // Returns 'C:/Users/name' on Unix
  */
-function normalizePath(filePath) {
+export function normalizePath(filePath) {
     if (isWindows()) {
         // On Windows, convert all forward slashes to backslashes
         return filePath.replace(/\//g, '\\');
@@ -223,7 +177,7 @@ function normalizePath(filePath) {
  * getAppDataDir() // Returns 'C:\\Users\\username\\AppData\\Roaming' on Windows
  * getAppDataDir() // Returns null on macOS/Linux
  */
-function getAppDataDir() {
+export function getAppDataDir() {
     if (isWindows()) {
         return process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
     }
@@ -238,7 +192,7 @@ function getAppDataDir() {
  * getLocalAppDataDir() // Returns 'C:\\Users\\username\\AppData\\Local' on Windows
  * getLocalAppDataDir() // Returns null on macOS/Linux
  */
-function getLocalAppDataDir() {
+export function getLocalAppDataDir() {
     if (isWindows()) {
         return process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
     }

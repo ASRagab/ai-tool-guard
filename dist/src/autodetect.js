@@ -1,47 +1,11 @@
-"use strict";
-/**
- * AutoDetector orchestrator for running multiple AI tool detectors in parallel.
- * Provides automatic loading and execution of all available detectors.
- * @module autodetect
- */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.AutoDetector = void 0;
-const fs_1 = require("fs");
-const path = __importStar(require("path"));
-const string_utils_1 = require("./utils/string-utils");
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import { findClosestMatches } from './utils/string-utils.js';
+import { isValidDetector, normalizeEcosystemName, ECOSYSTEM_ALIASES } from './utils/detector-utils.js';
+import chalk from 'chalk';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 /**
  * Orchestrator class that loads and runs all AI tool detectors in parallel.
  * Handles dynamic detector loading, parallel execution, error recovery, and timeouts.
@@ -58,13 +22,7 @@ const string_utils_1 = require("./utils/string-utils");
  * });
  * ```
  */
-class AutoDetector {
-    /**
-     * Creates a new AutoDetector instance.
-     *
-     * @param {string} [detectorsPath] - Optional custom path to detectors directory.
-     *                                   Defaults to './detectors' relative to this file.
-     */
+export class AutoDetector {
     constructor(detectorsPath) {
         this.detectors = [];
         this.DETECTOR_TIMEOUT_MS = 30000; // 30 seconds
@@ -87,35 +45,29 @@ class AutoDetector {
      */
     async loadDetectors() {
         try {
-            // Read all files in the detectors directory
-            const files = await fs_1.promises.readdir(this.detectorsDir);
-            // Filter for TypeScript/JavaScript files, excluding base-detector
+            const files = await fs.readdir(this.detectorsDir);
             const detectorFiles = files.filter(file => (file.endsWith('.ts') || file.endsWith('.js')) &&
                 file !== 'base-detector.ts' &&
-                file !== 'base-detector.js');
-            // Dynamically import each detector module
+                file !== 'base-detector.js' &&
+                file !== 'detector-registry.ts' &&
+                file !== 'detector-registry.js');
             for (const file of detectorFiles) {
                 try {
                     const modulePath = path.join(this.detectorsDir, file);
-                    const module = await Promise.resolve(`${modulePath}`).then(s => __importStar(require(s)));
-                    // Look for exported detector class
-                    // Common patterns: default export, named export, or exported instance
+                    const module = await import(modulePath);
                     const DetectorClass = module.default || module[Object.keys(module)[0]];
                     if (DetectorClass) {
-                        // Instantiate the detector if it's a class, or use directly if it's an instance
                         const detector = typeof DetectorClass === 'function'
                             ? new DetectorClass()
                             : DetectorClass;
-                        // Verify it implements the AIToolDetector interface
-                        if (this.isValidDetector(detector)) {
+                        if (isValidDetector(detector)) {
                             this.detectors.push(detector);
                         }
                     }
                 }
                 catch (error) {
-                    // Log but continue if a single detector fails to load
                     const errorMsg = error instanceof Error ? error.message : String(error);
-                    console.warn(`⚠️  Failed to load detector from ${file}: ${errorMsg}`);
+                    console.warn(chalk.yellow(`⚠️  Failed to load detector from ${file}: ${errorMsg}`));
                     this.detectorFailures.push({
                         detectorName: file,
                         error: errorMsg,
@@ -128,21 +80,7 @@ class AutoDetector {
             throw new Error(`Failed to read detectors directory: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-    /**
-     * Validates that an object implements the AIToolDetector interface.
-     *
-     * @private
-     * @param {any} obj - Object to validate
-     * @returns {boolean} True if the object is a valid detector
-     */
-    isValidDetector(obj) {
-        return (obj &&
-            typeof obj === 'object' &&
-            typeof obj.name === 'string' &&
-            typeof obj.detect === 'function' &&
-            typeof obj.getPaths === 'function' &&
-            typeof obj.checkPATH === 'function');
-    }
+    // isValidDetector is now imported from utils/detector-utils.ts
     /**
      * Runs all loaded detectors in parallel with timeout protection.
      * Returns only the results for ecosystems where components were found.
@@ -176,35 +114,18 @@ class AutoDetector {
      */
     async detectAll(ecosystemFilter, componentTypeFilter) {
         const results = new Map();
-        // Filter detectors by ecosystem if specified
         let detectorsToRun = this.detectors;
         if (ecosystemFilter) {
-            // First get available ecosystems for validation and suggestions
             const availableEcosystems = this.getAvailableEcosystems();
-            // Normalize the ecosystem filter (map 'copilot' to 'github-copilot', etc.)
-            const normalizedEcosystem = this.normalizeEcosystemName(ecosystemFilter);
-            // Check if the normalized ecosystem exists in available ecosystems
+            const normalizedEcosystem = normalizeEcosystemName(ecosystemFilter);
             if (!availableEcosystems.includes(normalizedEcosystem)) {
-                // Create a list that includes both full names and common short forms for better matching
-                const ecosystemsWithAliases = [
-                    ...availableEcosystems,
-                    'copilot', // short for github-copilot
-                    'claude', // short for claude-code
-                    'gemini' // short for google-gemini
-                ];
-                const suggestions = (0, string_utils_1.findClosestMatches)(ecosystemFilter, ecosystemsWithAliases, 5 // Increase max distance to catch more typos
+                // Include short aliases in suggestions
+                const aliasKeys = Object.keys(ECOSYSTEM_ALIASES);
+                const ecosystemsWithAliases = [...availableEcosystems, ...aliasKeys];
+                const suggestions = findClosestMatches(ecosystemFilter, ecosystemsWithAliases, 5 // Increase max distance to catch more typos
                 );
-                // Map suggestions back to full ecosystem names
-                const fullNameSuggestions = suggestions.map(s => {
-                    if (s === 'copilot')
-                        return 'github-copilot';
-                    if (s === 'claude')
-                        return 'claude-code';
-                    if (s === 'gemini')
-                        return 'google-gemini';
-                    return s;
-                });
-                // Remove duplicates from full name suggestions
+                // Map aliases to their full names
+                const fullNameSuggestions = suggestions.map(s => ECOSYSTEM_ALIASES[s] || s);
                 const uniqueSuggestions = [...new Set(fullNameSuggestions)];
                 let errorMsg = `Invalid ecosystem name: "${ecosystemFilter}"`;
                 if (uniqueSuggestions.length > 0) {
@@ -213,7 +134,6 @@ class AutoDetector {
                 errorMsg += `\n\nAvailable ecosystems: ${availableEcosystems.join(', ')}`;
                 throw new Error(errorMsg);
             }
-            // Filter detectors based on normalized ecosystem
             detectorsToRun = this.detectors.filter(d => {
                 // Match detector name to ecosystem
                 const detectorEcosystem = d.name.replace('-detector', '');
@@ -222,13 +142,10 @@ class AutoDetector {
                     d.name.includes(normalizedEcosystem.replace(/-/g, ''));
             });
         }
-        // Run all detectors in parallel
         const detectionPromises = detectorsToRun.map(detector => this.runDetectorWithTimeout(detector));
         const detectionResults = await Promise.all(detectionPromises);
-        // Filter and store only the results where components were found
         detectionResults.forEach(result => {
             if (result && result.found) {
-                // Apply component type filter if specified
                 if (componentTypeFilter) {
                     const filteredComponents = this.filterComponentsByType(result.components, componentTypeFilter);
                     if (Object.keys(filteredComponents).length > 0) {
@@ -255,13 +172,11 @@ class AutoDetector {
      */
     async runDetectorWithTimeout(detector) {
         try {
-            // Create a timeout promise
             const timeoutPromise = new Promise((_, reject) => {
                 setTimeout(() => {
                     reject(new Error(`Detector ${detector.name} timed out after ${this.DETECTOR_TIMEOUT_MS}ms`));
                 }, this.DETECTOR_TIMEOUT_MS);
             });
-            // Race between the detector and the timeout
             const result = await Promise.race([
                 detector.detect(),
                 timeoutPromise
@@ -269,10 +184,9 @@ class AutoDetector {
             return result;
         }
         catch (error) {
-            // Log the error but continue with other detectors
             const errorMsg = error instanceof Error ? error.message : String(error);
             const isTimeout = errorMsg.includes('timed out');
-            console.warn(`⚠️  Detector ${detector.name} ${isTimeout ? 'timed out' : 'failed'}: ${errorMsg}`);
+            console.warn(chalk.yellow(`⚠️  Detector ${detector.name} ${isTimeout ? 'timed out' : 'failed'}: ${errorMsg}`));
             this.detectorFailures.push({
                 detectorName: detector.name,
                 error: errorMsg,
@@ -325,11 +239,8 @@ class AutoDetector {
      * ```
      */
     getAvailableEcosystems() {
-        // Map detector names to ecosystem names
-        // Pattern: <ecosystem>-detector -> <ecosystem>
         const ecosystems = this.detectors.map(d => {
             const name = d.name.replace('-detector', '');
-            // Handle special cases - map detector name to canonical ecosystem name
             if (name === 'claudecode' || name === 'claude-code')
                 return 'claude-code';
             if (name === 'copilot')
@@ -338,32 +249,9 @@ class AutoDetector {
                 return 'google-gemini';
             return name;
         });
-        return [...new Set(ecosystems)]; // Remove duplicates
+        return [...new Set(ecosystems)];
     }
-    /**
-     * Normalizes an ecosystem name to match the canonical format.
-     * Handles common aliases and variations.
-     *
-     * @private
-     * @param {string} name - Ecosystem name to normalize
-     * @returns {string} Normalized ecosystem name
-     *
-     * @example
-     * normalizeEcosystemName('copilot') -> 'github-copilot'
-     * normalizeEcosystemName('claude') -> 'claude-code'
-     * normalizeEcosystemName('gemini') -> 'google-gemini'
-     */
-    normalizeEcosystemName(name) {
-        const normalized = name.toLowerCase().trim();
-        // Handle common aliases
-        const aliases = {
-            'copilot': 'github-copilot',
-            'claude': 'claude-code',
-            'gemini': 'google-gemini',
-            'open-code': 'opencode'
-        };
-        return aliases[normalized] || normalized;
-    }
+    // normalizeEcosystemName is now imported from utils/detector-utils.ts
     /**
      * Filters components by type, supporting both exact matches and partial matches.
      *
@@ -385,17 +273,14 @@ class AutoDetector {
         const filtered = {};
         const normalizedFilter = typeFilter.toLowerCase().trim();
         for (const [key, component] of Object.entries(components)) {
-            // Match by component type field
             if (component.type && component.type.toLowerCase().includes(normalizedFilter)) {
                 filtered[key] = component;
                 continue;
             }
-            // Match by component key prefix (e.g., 'mcp-server:name')
             if (key.toLowerCase().startsWith(normalizedFilter + ':')) {
                 filtered[key] = component;
                 continue;
             }
-            // Handle plural forms (e.g., 'hooks' -> 'hook', 'mcp-servers' -> 'mcp-server')
             const singularFilter = normalizedFilter.endsWith('s')
                 ? normalizedFilter.slice(0, -1)
                 : normalizedFilter;
@@ -444,17 +329,17 @@ class AutoDetector {
         if (this.detectorFailures.length === 0) {
             return;
         }
-        console.log('\n⚠️  Detector Failures:');
+        console.log(chalk.yellow('\n⚠️  Detector Failures:'));
         const failuresByType = this.detectorFailures.reduce((acc, failure) => {
             acc[failure.type] = (acc[failure.type] || 0) + 1;
             return acc;
         }, {});
         Object.entries(failuresByType).forEach(([type, count]) => {
-            console.log(`   - ${type}: ${count} detector(s)`);
+            console.log(chalk.yellow(`   - ${type}: ${count} detector(s)`));
         });
-        console.log('\n   Details:');
+        console.log(chalk.yellow('\n   Details:'));
         this.detectorFailures.forEach(failure => {
-            console.log(`   - ${failure.detectorName}: ${failure.error}`);
+            console.log(chalk.dim(`   - ${failure.detectorName}: ${failure.error}`));
         });
     }
     /**
@@ -506,33 +391,25 @@ class AutoDetector {
      * ```
      */
     async scanDetected(detectionResults) {
-        const { selectScanner } = await Promise.resolve().then(() => __importStar(require('./scanners/scanner-factory')));
+        const { selectScanner } = await import('./scanners/scanner-factory.js');
         const ecosystemReports = new Map();
         let totalIssues = 0;
-        // Iterate through each detected ecosystem
         for (const [ecosystemName, detectionResult] of detectionResults) {
             const componentScans = new Map();
             let ecosystemTotalIssues = 0;
-            // Iterate through each component in the ecosystem
             for (const [componentKey, componentInfo] of Object.entries(detectionResult.components)) {
                 try {
-                    // Determine component type from the component info
                     const componentType = this.mapComponentTypeToScannerType(componentInfo.type);
-                    // Select appropriate scanner based on component type and path
                     const scanner = selectScanner(componentType, componentInfo.path);
-                    // Scan the component's path
                     const scanResults = await scanner.scanDirectory(componentInfo.path);
-                    // Store scan results for this component
                     if (scanResults.length > 0) {
                         componentScans.set(componentKey, scanResults);
-                        // Calculate issue count for this component
                         const componentIssues = scanResults.reduce((sum, result) => sum + result.matches.length, 0);
                         ecosystemTotalIssues += componentIssues;
                     }
                 }
                 catch (error) {
-                    // Log error but continue scanning other components
-                    console.warn(`⚠️  Failed to scan component ${componentKey}: ${error instanceof Error ? error.message : String(error)}`);
+                    console.warn(chalk.yellow(`⚠️  Failed to scan component ${componentKey}: ${error instanceof Error ? error.message : String(error)}`));
                 }
             }
             // Create ecosystem report
@@ -579,4 +456,3 @@ class AutoDetector {
         return 'unknown';
     }
 }
-exports.AutoDetector = AutoDetector;

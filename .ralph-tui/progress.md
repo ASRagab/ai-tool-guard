@@ -203,3 +203,22 @@ orm":"Running npm run build to verify compilation"},{"content":"Run npm run test
 {"type":"assistant","message":{"model":"claude-sonnet-4-5-20250929","id":"msg_vrtx_01BoR1wGr4JuuMz9rmTpBNHx","type":"message","role":"assistant","content":[{"type":"text","text":"
 
 ---
+## ✓ Iteration 22 - US-016: Implement automatic detection mode
+*2026-01-20T23:16:09.769Z (105s)*
+
+**Status:** Completed
+
+**Notes:**
+","activeForm":"Running npm run build to verify compilation"},{"content":"Run npm run test to verify tests pass","status":"completed","activeForm":"Running npm run test to verify tests pass"},{"content":"Commit changes with feature message","status":"completed","activeForm":"Committing changes with feature message"}]}}
+{"type":"assistant","message":{"model":"claude-sonnet-4-5-20250929","id":"msg_vrtx_01FxezfFuuGst7s3A3a9J7zk","type":"message","role":"assistant","content":[{"type":"text","text":"
+
+---
+## ✓ Iteration 23 - US-017: Implement interactive detection mode
+*2026-01-20T23:18:30.893Z (140s)*
+
+**Status:** Completed
+
+**Notes:**
+ystems selected by default\n\n6. **Filtered scanning** - Only scans the ecosystems selected by the user\n\n7. **Consistent output format** - Results displayed in the same format as automatic mode with:\n   - Emoji indicators per ecosystem\n   - Issue counts and details\n   - Component-level breakdown\n\n8. **Quality checks passed**:\n   - ✅ `npm run build` - Compilation successful\n   - ✅ `npm run test` - All 25 tests passed\n\n9. **Git commit** - Changes committed with proper message format\n\n
+
+---

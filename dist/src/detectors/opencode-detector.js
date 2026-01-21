@@ -1,47 +1,12 @@
-"use strict";
 /**
  * OpenCode Detector - detects OpenCode installation and components
  * Scans for plugins and config files in OpenCode directories
  * @module detectors/opencode-detector
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.OpenCodeDetector = void 0;
-const fs_1 = require("fs");
-const path = __importStar(require("path"));
-const path_utils_1 = require("../utils/path-utils");
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import { expandTilde, parsePATH, resolvePath, isSymlink } from '../utils/path-utils.js';
+import { detectDirectory } from '../utils/detector-utils.js';
 /**
  * Detector for OpenCode CLI and its components.
  * Searches for:
@@ -65,7 +30,7 @@ const path_utils_1 = require("../utils/path-utils");
  * }
  * ```
  */
-class OpenCodeDetector {
+export class OpenCodeDetector {
     constructor() {
         this.name = 'opencode-detector';
     }
@@ -86,8 +51,8 @@ class OpenCodeDetector {
      */
     getPaths() {
         return [
-            (0, path_utils_1.expandTilde)('~/.config/opencode/'),
-            (0, path_utils_1.expandTilde)('~/.opencode/')
+            expandTilde('~/.config/opencode/'),
+            expandTilde('~/.opencode/')
         ];
     }
     /**
@@ -105,13 +70,13 @@ class OpenCodeDetector {
      */
     async checkPATH() {
         const components = [];
-        const pathDirs = (0, path_utils_1.parsePATH)();
+        const pathDirs = parsePATH();
         for (const dir of pathDirs) {
             try {
                 const opencodePath = path.join(dir, 'opencode');
                 // Check if the executable exists
                 try {
-                    await fs_1.promises.access(opencodePath, fs_1.promises.constants.X_OK);
+                    await fs.access(opencodePath, fs.constants.X_OK);
                 }
                 catch {
                     // Not executable or doesn't exist, skip
@@ -119,9 +84,9 @@ class OpenCodeDetector {
                 }
                 // Resolve symlinks to get the real path
                 let resolvedPath = opencodePath;
-                if (await (0, path_utils_1.isSymlink)(opencodePath)) {
+                if (await isSymlink(opencodePath)) {
                     try {
-                        resolvedPath = await (0, path_utils_1.resolvePath)(opencodePath);
+                        resolvedPath = await resolvePath(opencodePath);
                     }
                     catch {
                         // If symlink resolution fails, use the original path
@@ -175,7 +140,7 @@ class OpenCodeDetector {
         for (const basePath of scanPaths) {
             // Detect plugins directory
             const pluginsPath = path.join(basePath, 'plugins');
-            const plugins = await this.detectDirectory(pluginsPath, 'plugin');
+            const plugins = await detectDirectory(pluginsPath, 'plugin');
             plugins.forEach(comp => {
                 components[`plugin:${comp.name}`] = comp;
             });
@@ -192,38 +157,7 @@ class OpenCodeDetector {
             scanPaths
         };
     }
-    /**
-     * Detects components in a directory by reading all entries.
-     * Categorizes entries by the specified type.
-     *
-     * @private
-     * @param {string} dirPath - Directory path to scan
-     * @param {string} componentType - Type classification for detected components
-     * @returns {Promise<ComponentInfo[]>} Array of detected components
-     */
-    async detectDirectory(dirPath, componentType) {
-        const components = [];
-        try {
-            const entries = await fs_1.promises.readdir(dirPath, { withFileTypes: true });
-            for (const entry of entries) {
-                const fullPath = path.join(dirPath, entry.name);
-                // Skip hidden files/directories (starting with .)
-                if (entry.name.startsWith('.')) {
-                    continue;
-                }
-                components.push({
-                    name: entry.name,
-                    path: fullPath,
-                    type: componentType
-                });
-            }
-        }
-        catch (error) {
-            // Directory doesn't exist or isn't accessible - return empty array
-            return [];
-        }
-        return components;
-    }
+    // detectDirectory is now imported from utils/detector-utils.ts
     /**
      * Detects configuration files in the OpenCode directory.
      * Looks for common config file patterns (*.json, *.yaml, *.yml, *.toml, *.ini).
@@ -236,7 +170,7 @@ class OpenCodeDetector {
         const components = [];
         const configExtensions = ['.json', '.yaml', '.yml', '.toml', '.ini'];
         try {
-            const entries = await fs_1.promises.readdir(dirPath, { withFileTypes: true });
+            const entries = await fs.readdir(dirPath, { withFileTypes: true });
             for (const entry of entries) {
                 // Only check files, not directories
                 if (!entry.isFile()) {
@@ -265,4 +199,3 @@ class OpenCodeDetector {
         return components;
     }
 }
-exports.OpenCodeDetector = OpenCodeDetector;
